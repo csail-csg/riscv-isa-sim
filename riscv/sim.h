@@ -41,13 +41,17 @@ public:
 
 private:
   std::unique_ptr<htif_isasim_t> htif;
+ public:
   char* mem; // main memory
   size_t memsz; // memory size in bytes
+ private:
   mmu_t* debug_mmu;  // debug port into main memory
   std::vector<processor_t*> procs;
 
+ public:
   processor_t* get_core(const std::string& i);
   void step(size_t n); // step through simulation
+ private:
   static const size_t INTERLEAVE = 5000;
   static const size_t INSNS_PER_RTC_TICK = 100; // 10 MHz clock for 1 BIPS core
   reg_t rtc;
