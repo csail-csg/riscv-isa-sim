@@ -117,6 +117,7 @@ miss:
     }
     catch(trap_t& t)
     {
+      instret++;
       take_trap(t, pc);
     }
 
