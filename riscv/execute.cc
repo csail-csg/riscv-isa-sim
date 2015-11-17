@@ -74,6 +74,16 @@ void processor_t::step(size_t n)
       check_timer();
       take_interrupt();
 
+#if 1
+      while (instret < n)
+      {
+        insn_fetch_t fetch = mmu->load_insn(pc);
+        if (debug && !state.serialized)
+          disasm(fetch.insn);
+        pc = execute_insn(this, pc, fetch);
+        advance_pc();
+      }
+#else
       if (unlikely(debug))
       {
         while (instret < n)
@@ -114,10 +124,12 @@ miss:
         if (pc > (ic_entry-1)->tag && pc <= (ic_entry-1)->tag + MAX_INSN_LENGTH)
           _mmu->refill_icache(pc, ic_entry);
       }
+#endif
     }
     catch(trap_t& t)
     {
       take_trap(t, pc);
+      instret++;
     }
 
     state.minstret += instret;
