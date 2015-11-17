@@ -52,8 +52,8 @@ private:
   processor_t* get_core(const std::string& i);
   void step(size_t n); // step through simulation
  private:
-  static const size_t INTERLEAVE = 5000;
-  static const size_t INSNS_PER_RTC_TICK = 100; // 10 MHz clock for 1 BIPS core
+  static const size_t INTERLEAVE = 128;
+  static const size_t INSNS_PER_RTC_TICK = 128; // not a 10 MHz clock for 1 BIPS core
   reg_t rtc;
   size_t current_step;
   size_t current_proc;
