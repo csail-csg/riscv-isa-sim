@@ -1,3 +1,5 @@
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
 #define __STDINT_LIMITS
 #include <stdint.h>
 #include "hwacha.h"

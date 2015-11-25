@@ -1,3 +1,6 @@
+#define __STDC_FORMAT_MACROS
+#include <stdint.h>
+
 if (VL) {
   if (!h->vf_active()) {
     WRITE_VF_PC(XS1 + insn.s_imm());
