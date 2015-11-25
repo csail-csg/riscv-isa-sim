@@ -1,5 +1,6 @@
 // See LICENSE for license details.
 
+#define __STDC_FORMAT_MACROS
 #include "decode.h"
 #include "disasm.h"
 #include "sim.h"

@@ -1,5 +1,6 @@
 // See LICENSE for license details.
 
+#define __STDC_FORMAT_MACROS
 #include "processor.h"
 #include "extension.h"
 #include "common.h"
