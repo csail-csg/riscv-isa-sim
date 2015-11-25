@@ -1,5 +1,7 @@
 // See LICENSE for license details.
 
+#define __STDINT_LIMITS
+#include <stdint.h>
 #include "mmu.h"
 #include "mulhi.h"
 #include "softfloat.h"

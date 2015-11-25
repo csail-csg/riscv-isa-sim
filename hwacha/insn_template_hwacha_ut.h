@@ -1,3 +1,5 @@
+#define __STDINT_LIMITS
+#include <stdint.h>
 #include "hwacha.h"
 #include "mulhi.h"
 #include "decode_hwacha_ut.h"

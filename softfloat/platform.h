@@ -36,6 +36,8 @@ these four paragraphs for those parts of this code that are retained.
 *----------------------------------------------------------------------------*/
 #define LITTLEENDIAN
 
+#define __STDINT_LIMITS
+#include <stdint.h>
 #ifndef UINT64_C
 # define UINT64_C(x) (x ## ULL)
 # define INT64_C(x) (x ## LL)
