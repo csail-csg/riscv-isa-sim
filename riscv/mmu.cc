@@ -34,6 +34,7 @@ reg_t mmu_t::translate(reg_t addr, access_type type)
   if (!proc)
     return addr;
 
+  // [sizhuo] black magic in determining VM options
   reg_t mode = get_field(proc->state.mstatus, MSTATUS_PRV);
   if (type != FETCH && get_field(proc->state.mstatus, MSTATUS_MPRV))
     mode = get_field(proc->state.mstatus, MSTATUS_PRV1);

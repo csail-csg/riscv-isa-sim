@@ -22,6 +22,7 @@ struct insn_fetch_t
   insn_t insn;
 };
 
+// [sizhuo] each I$ entry only has 1 inst
 struct icache_entry_t {
   reg_t tag;
   reg_t pad;
@@ -79,6 +80,7 @@ public:
   store_func(uint32)
   store_func(uint64)
 
+  // [sizhuo] virtually-indexed-vritally-tagged direct-mapped I cache
   static const reg_t ICACHE_ENTRIES = 1024;
 
   inline size_t icache_index(reg_t addr)
@@ -151,6 +153,7 @@ private:
   icache_entry_t icache[ICACHE_ENTRIES];
 
   // implement a TLB for simulator performance
+  // [sizhuo] direct-mapped TLB
   static const reg_t TLB_ENTRIES = 256;
   char* tlb_data[TLB_ENTRIES];
   reg_t tlb_insn_tag[TLB_ENTRIES];

@@ -16,15 +16,16 @@ class trap_t
   reg_t cause() { return which; }
  private:
   char _name[16];
-  reg_t which;
+  reg_t which; // [sizhuo] cause
 };
 
+// [sizhuo] trap about memory/VM
 class mem_trap_t : public trap_t
 {
  public:
   mem_trap_t(reg_t which, reg_t badvaddr)
     : trap_t(which), badvaddr(badvaddr) {}
-  void side_effects(state_t* state);
+  void side_effects(state_t* state); // [sizhuo] set bad address CSR
   reg_t get_badvaddr() { return badvaddr; }
  private:
   reg_t badvaddr;

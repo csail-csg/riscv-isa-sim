@@ -7,6 +7,7 @@
 #include <cstring>
 #include <vector>
 #include <map>
+#include <queue>
 
 class processor_t;
 class mmu_t;
@@ -16,6 +17,7 @@ class trap_t;
 class extension_t;
 class disassembler_t;
 
+// [sizhuo] inst dec/ex info
 struct insn_desc_t
 {
   insn_bits_t match;
@@ -57,7 +59,7 @@ struct state_t
   reg_t scause;
   reg_t sutime_delta;
   reg_t suinstret_delta;
-  reg_t tohost;
+  //reg_t tohost; // [sizhuo] replaced by FIFO, value is always 0
   reg_t fromhost;
   uint32_t fflags;
   uint32_t frm;
@@ -100,6 +102,10 @@ public:
 
   void register_insn(insn_desc_t);
   void register_extension(extension_t*);
+  
+  // [sizhuo] to/from host FIFO
+  std::queue<reg_t> tohost_fifo;
+  std::queue<reg_t> fromhost_fifo;
 
 private:
   sim_t* sim;
@@ -115,7 +121,7 @@ private:
   bool debug;
   bool histogram_enabled;
 
-  std::vector<insn_desc_t> instructions;
+  std::vector<insn_desc_t> instructions; // [sizhuo] all inst
   std::map<size_t,size_t> pc_histogram;
 
   static const size_t OPCODE_CACHE_SIZE = 8191;

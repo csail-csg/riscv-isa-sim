@@ -141,6 +141,14 @@ void processor_t::reset(bool value)
   state.reset();
   set_csr(CSR_MSTATUS, state.mstatus);
 
+  // [sizhuo] clear to/from host FIFOs
+  while(!tohost_fifo.empty()) {
+	  tohost_fifo.pop();
+  }
+  while(!fromhost_fifo.empty()) {
+	  fromhost_fifo.pop();
+  }
+
   if (ext)
     ext->reset(); // reset the extension
 }
@@ -370,8 +378,12 @@ void processor_t::set_csr(int which, reg_t val)
       break;
     case CSR_SEND_IPI: sim->send_ipi(val); break;
     case CSR_MTOHOST:
-      if (state.tohost == 0)
-        state.tohost = val;
+	  // [sizhuo] change to FIFO enq, but 0 should not be enqueued
+      //if (state.tohost == 0)
+      //  state.tohost = val;
+	  if(val != 0) {
+	    tohost_fifo.push(val);
+	  }
       break;
     case CSR_MFROMHOST: state.fromhost = val; break;
   }
@@ -462,10 +474,12 @@ reg_t processor_t::get_csr(int which)
     case CSR_MTVEC: return DEFAULT_MTVEC;
     case CSR_MTDELEG: return 0;
     case CSR_MTOHOST:
-      sim->get_htif()->tick(); // not necessary, but faster
-      return state.tohost;
+      //sim->get_htif()->tick(); // not necessary, but faster
+      //return state.tohost;
+	  return 0; // [sizhuo] change to always return 0 for reading MTOHOST
     case CSR_MFROMHOST:
-      sim->get_htif()->tick(); // not necessary, but faster
+	  // [sizhuo] comment out tick, we now tick HTIF deterministically
+      //sim->get_htif()->tick(); // not necessary, but faster
       return state.fromhost;
     case CSR_SEND_IPI: return 0;
     case CSR_UARCH0:

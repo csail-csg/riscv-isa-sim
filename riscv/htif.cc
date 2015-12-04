@@ -10,7 +10,10 @@
 #include <assert.h>
 #include <stddef.h>
 #include <poll.h>
+#include <stdio.h>
 
+#if 0
+// [sizhuo] comment out original spike HTIF
 htif_isasim_t::htif_isasim_t(sim_t* _sim, const std::vector<std::string>& args)
   : htif_pthread_t(args), sim(_sim), reset(true), seqno(1)
 {
@@ -122,4 +125,78 @@ bool htif_isasim_t::done()
   if (reset)
     return false;
   return !sim->running();
+}
+#endif
+
+htif_isasim_t::htif_isasim_t(sim_t *_sim, const std::vector<std::string> &args) : 
+	htif_riscy_t(args), 
+	sim(_sim)
+{
+	// assertion on 8B alignment & core num
+	if(sim->num_cores() != 1) {
+		fprintf(stderr, ">> ERROR: spike: should only run 1 core for riscy\n");
+		exit(1);
+	}
+	if(((uint64_t)(sim->mem)) & 0x07ULL) {
+		fprintf(stderr, ">> ERROR: spike: memory allocated by is not 8B aligned\n");
+		exit(1);
+	}
+
+	// set memory
+	set_mem((uint64_t*)(sim->mem), sim->memsz);
+
+}
+
+void htif_isasim_t::register_enq_fromhost() {
+	// set write fromhost function
+	// must be done after processors are created
+	// current htif_riscy_t only allows set for core 0
+	enq_fromhost.fifo = &(sim->procs[0]->fromhost_fifo);
+	set_write_from_host(enq_fromhost);
+}
+
+void htif_isasim_t::host_tick(int coreid) {
+	processor_t *proc = sim->procs[coreid];
+	if(proc->tohost_fifo.empty()) {
+		return;
+	}
+
+	// assertion: only 1 element in tohost FIFO
+	if(proc->tohost_fifo.size() != 1) {
+		fprintf(stderr, ">> WARNING: spike: there are %d (>1) elements in tohost FIFO of core %d\n",
+				proc->tohost_fifo.size(), coreid);
+	}
+
+	// get tohost & handle
+	reg_t val = proc->tohost_fifo.front();
+	proc->tohost_fifo.pop();
+	get_to_host(val);
+}
+
+void htif_isasim_t::device_tick() {
+    device_list.tick();
+}
+
+void htif_isasim_t::target_tick(int coreid) {
+	// deq fromhost FIFO to write mfromhost
+	processor_t *proc = sim->procs[coreid];
+	if(proc->fromhost_fifo.empty()) {
+		return;
+	}
+
+	// assertion: without keyboard input, there should be only 1 element in fromhost FIFO,
+	// and mfromhost should be 0
+	if(proc->fromhost_fifo.size() != 1) {
+		fprintf(stderr, ">> WARNING: spike: there are %d (>1) elements in fromhost FIFO of core %d\n",
+				proc->fromhost_fifo.size(), coreid);
+	}
+	if(proc->get_csr(CSR_MFROMHOST) != 0) {
+		fprintf(stderr, ">> WARNING: spike: mfromhost is not zero when there is response in fromhost FIFO of core %d\n", coreid);
+	}
+
+	if(proc->get_csr(CSR_MFROMHOST) == 0) {
+		reg_t val = proc->fromhost_fifo.front();
+		proc->fromhost_fifo.pop();
+		proc->set_csr(CSR_MFROMHOST, val);
+	}
 }
