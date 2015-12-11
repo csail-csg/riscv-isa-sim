@@ -11,6 +11,7 @@
 #include <stddef.h>
 #include <poll.h>
 #include <stdio.h>
+#include <fesvr/term.h>
 
 #if 0
 // [sizhuo] comment out original spike HTIF
@@ -169,12 +170,26 @@ void htif_isasim_t::host_tick(int coreid) {
 
 	// get tohost & handle
 	reg_t val = proc->tohost_fifo.front();
+  
+  // [sizhuo] debug
+  //fprintf(stderr, ">> INFO: spike: get mtohost = 0x%016llx\n", (unsigned long long)val);
+
 	proc->tohost_fifo.pop();
 	get_to_host(val);
 }
 
 void htif_isasim_t::device_tick() {
-    device_list.tick();
+    device_t *bcd = device_list.get_bcd();
+    if(bcd) {
+        if(bcd->wait_for_stdin()) {
+            int ch = canonical_terminal_t::read();
+            if(ch != -1) {
+                bcd->feed_stdin(ch);
+            }
+        }
+    } else {
+        fprintf(stderr, ">> ERROR: there is no device bcd\n");
+    }
 }
 
 void htif_isasim_t::target_tick(int coreid) {
@@ -198,5 +213,7 @@ void htif_isasim_t::target_tick(int coreid) {
 		reg_t val = proc->fromhost_fifo.front();
 		proc->fromhost_fifo.pop();
 		proc->set_csr(CSR_MFROMHOST, val);
+    // [sizhuo] debug
+    //fprintf(stderr, ">> INFO: spike: set mfromhost = 0x%016llx\n", (unsigned long long)val);
 	}
 }

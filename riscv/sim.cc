@@ -97,7 +97,7 @@ int sim_t::run()
   {
     if (debug || ctrlc_pressed)
       interactive();
-    else
+    else 
       step(INTERLEAVE);
   }
   return htif->exit_code();
@@ -129,7 +129,7 @@ void sim_t::step(size_t n)
   for(size_t i = 0; i < n; i++) {
     procs[current_proc]->step(1);
     htif->host_tick(current_proc);
-	htif->device_tick(); // [sizhuo] comment out if we don't want stdin
+	htif->device_tick(); // [sizhuo] feed bcd with stdin if it needs
     htif->target_tick(current_proc);
 
     current_step++;
@@ -140,6 +140,25 @@ void sim_t::step(size_t n)
         rtc += INTERLEAVE / INSNS_PER_RTC_TICK;
       }
 	}
+  }
+}
+
+void sim_t::single_step_no_stdin()
+{
+  // [sizhuo] use a simpler way, tick HTIF after every step
+  procs[current_proc]->step(1);
+  htif->host_tick(current_proc);
+  // [sizhuo] no tick for device (bcd)
+  // someone else should feed bcd with stdin and tick target
+  htif->target_tick(current_proc);
+
+  current_step++;
+  if (current_step == INTERLEAVE) {
+    current_step = 0;
+    if (++current_proc == procs.size()) {
+      current_proc = 0;
+      rtc += INTERLEAVE / INSNS_PER_RTC_TICK;
+    }
   }
 }
 

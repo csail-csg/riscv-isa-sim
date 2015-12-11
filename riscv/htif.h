@@ -40,7 +40,8 @@ public:
 	~htif_isasim_t() {}
 	void register_enq_fromhost();
 	void host_tick(int coreid);
-	void device_tick();
+    // [sizhuo] feed bcd with stdin if it needs & there is stdin
+	void device_tick(); 
 	void target_tick(int coreid);
 
 private:
