@@ -217,3 +217,8 @@ void htif_isasim_t::target_tick(int coreid) {
     //fprintf(stderr, ">> INFO: spike: set mfromhost = 0x%016llx\n", (unsigned long long)val);
 	}
 }
+
+void htif_isasim_t::disable_stdout() {
+	bcd_t *bcd = (bcd_t*) device_list.get_bcd();
+	bcd->set_stdout_en(false);
+}

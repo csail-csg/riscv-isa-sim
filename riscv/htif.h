@@ -43,6 +43,7 @@ public:
     // [sizhuo] feed bcd with stdin if it needs & there is stdin
 	void device_tick(); 
 	void target_tick(int coreid);
+	void disable_stdout();
 
 private:
 	sim_t *sim;
