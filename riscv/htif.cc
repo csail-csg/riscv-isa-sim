@@ -219,6 +219,5 @@ void htif_isasim_t::target_tick(int coreid) {
 }
 
 void htif_isasim_t::disable_stdout() {
-	bcd_t *bcd = (bcd_t*) device_list.get_bcd();
-	bcd->set_stdout_en(false);
+	device_list.set_stdout_en(false); // do this for all devices
 }

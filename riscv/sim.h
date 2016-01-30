@@ -50,14 +50,16 @@ private:
 
  public:
   processor_t* get_core(const std::string& i);
-  void single_step_no_stdin(); // [sizhuo] for tandem verification
+  void single_step_synchronize(bool force_trap, reg_t force_trap_cause); // [sizhuo] for tandem verification
 
  private:
   void step(size_t n); // step through simulation
 
   static const size_t INTERLEAVE = 128;
   static const size_t INSNS_PER_RTC_TICK = 128; // not a 10 MHz clock for 1 BIPS core
+ public:
   reg_t rtc;
+ private:
   size_t current_step;
   size_t current_proc;
   bool debug;

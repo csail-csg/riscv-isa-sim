@@ -143,14 +143,15 @@ void sim_t::step(size_t n)
   }
 }
 
-void sim_t::single_step_no_stdin()
+// This method is used for synchronizing spike with a processor under tandem verification
+void sim_t::single_step_synchronize(bool force_trap, reg_t force_trap_cause)
 {
   // [sizhuo] use a simpler way, tick HTIF after every step
-  procs[current_proc]->step(1);
+  procs[current_proc]->single_step_synchronize(force_trap, force_trap_cause);
   htif->host_tick(current_proc);
   // [sizhuo] no tick for device (bcd)
   // someone else should feed bcd with stdin and tick target
-  htif->target_tick(current_proc);
+  // htif->target_tick(current_proc); // This is done by manually writing to fromhost outside this function
 
   current_step++;
   if (current_step == INTERLEAVE) {

@@ -84,6 +84,7 @@ public:
   void set_histogram(bool value);
   void reset(bool value);
   void step(size_t n); // run for n cycles
+  void single_step_synchronize(bool force_trap, reg_t force_trap_cause); // run a single instruction synchronized with a processor under tandem verification
   void deliver_ipi(); // register an interprocessor interrupt
   bool running() { return run; }
   void set_csr(int which, reg_t val);
@@ -129,6 +130,7 @@ private:
 
   void check_timer();
   void take_interrupt(); // take a trap if any interrupts are pending
+  void take_software_interrupt(); // take a trap if any software interrupts are pending
   void take_trap(trap_t& t, reg_t epc); // take an exception
   void disasm(insn_t insn); // disassemble and print an instruction
 

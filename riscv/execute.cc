@@ -4,7 +4,6 @@
 #include "mmu.h"
 #include <cassert>
 
-
 static void commit_log_stash_privilege(state_t* state)
 {
 #ifdef RISCV_ENABLE_COMMITLOG
@@ -134,5 +133,49 @@ miss:
 
     state.minstret += instret;
     n -= instret;
+  }
+}
+
+// This is used for synchronizing spike with a processor under tandem verification
+void processor_t::single_step_synchronize(bool force_trap, reg_t force_trap_cause)
+{
+  bool instret = false;
+  while (run && !instret) {
+    reg_t pc = state.pc;
+    mmu_t* _mmu = mmu;
+
+    #define advance_pc_single_step_synchronize() \
+     if (unlikely(pc == PC_SERIALIZE)) { \
+       pc = state.pc; \
+       state.serialized = true; \
+       break; \
+     } else { \
+       state.pc = pc; \
+       instret = true; \
+     }
+
+    try
+    {
+      if (force_trap)
+        throw trap_t(force_trap_cause);
+      check_timer();
+      take_software_interrupt();
+
+      while (!instret)
+      {
+        insn_fetch_t fetch = mmu->load_insn(pc);
+        if (debug && !state.serialized)
+          disasm(fetch.insn);
+        pc = execute_insn(this, pc, fetch);
+        advance_pc_single_step_synchronize();
+      }
+    }
+    catch(trap_t& t)
+    {
+      take_trap(t, pc);
+      instret = true;
+    }
+
+    if (instret) state.minstret++;
   }
 }
