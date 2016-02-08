@@ -412,6 +412,7 @@ void processor_t::set_csr(int which, reg_t val)
 	  }
       break;
     case CSR_MFROMHOST: state.fromhost = val; break;
+    case CSR_STATS: state.stats = val; break;
   }
 }
 
@@ -525,6 +526,7 @@ reg_t processor_t::get_csr(int which)
     case CSR_UARCH14:
     case CSR_UARCH15:
       return 0;
+    case CSR_STATS: return state.stats;
   }
   throw trap_illegal_instruction();
 }

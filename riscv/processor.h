@@ -63,6 +63,7 @@ struct state_t
   reg_t fromhost;
   uint32_t fflags;
   uint32_t frm;
+  reg_t stats; // [sizhuo] whether we collect statistics
   bool serialized; // whether timer CSRs are in a well-defined state
 
   reg_t load_reservation;
