@@ -142,9 +142,6 @@ void processor_t::reset(bool value)
   set_csr(CSR_MSTATUS, state.mstatus);
 
   // [sizhuo] clear to/from host FIFOs
-  while(!tohost_fifo.empty()) {
-	  tohost_fifo.pop();
-  }
   while(!fromhost_fifo.empty()) {
 	  fromhost_fifo.pop();
   }
@@ -404,12 +401,9 @@ void processor_t::set_csr(int which, reg_t val)
       break;
     case CSR_SEND_IPI: sim->send_ipi(val); break;
     case CSR_MTOHOST:
-	  // [sizhuo] change to FIFO enq, but 0 should not be enqueued
-      //if (state.tohost == 0)
-      //  state.tohost = val;
-	  if(val != 0) {
-	    tohost_fifo.push(val);
-	  }
+      if (val != 0) {
+        sim->get_htif()->get_to_host(val);
+      }
       break;
     case CSR_MFROMHOST: state.fromhost = val; break;
     case CSR_STATS: state.stats = val; break;

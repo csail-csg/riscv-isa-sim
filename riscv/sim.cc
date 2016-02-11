@@ -128,9 +128,9 @@ void sim_t::step(size_t n)
   // [sizhuo] use a simpler way, tick HTIF after every step
   for(size_t i = 0; i < n; i++) {
     procs[current_proc]->step(1);
-    htif->host_tick(current_proc);
-	htif->device_tick(); // [sizhuo] feed bcd with stdin if it needs
-    htif->target_tick(current_proc);
+    // htif->host_tick(current_proc); // removed in favor of writing to mtohost by calling get_to_host
+    htif->check_stdin_for_bcd(); // [sizhuo] feed bcd with stdin if it needs
+    htif->check_from_host(current_proc);
 
     current_step++;
     if (current_step == INTERLEAVE) {
@@ -148,10 +148,10 @@ void sim_t::single_step_synchronize(bool force_trap, reg_t force_trap_cause)
 {
   // [sizhuo] use a simpler way, tick HTIF after every step
   procs[current_proc]->single_step_synchronize(force_trap, force_trap_cause);
-  htif->host_tick(current_proc);
+  // htif->host_tick(current_proc); // removed in favor of writing to mtohost by calling get_to_host
   // [sizhuo] no tick for device (bcd)
   // someone else should feed bcd with stdin and tick target
-  // htif->target_tick(current_proc); // This is done by manually writing to fromhost outside this function
+  // htif->check_from_host(current_proc); // This is done by manually writing to fromhost outside this function
 
   current_step++;
   if (current_step == INTERLEAVE) {

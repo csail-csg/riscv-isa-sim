@@ -39,10 +39,9 @@ public:
 	htif_isasim_t(sim_t *_sim, const std::vector<std::string>& args);
 	~htif_isasim_t() {}
 	void register_enq_fromhost();
-	void host_tick(int coreid);
-    // [sizhuo] feed bcd with stdin if it needs & there is stdin
-	void device_tick(); 
-	void target_tick(int coreid);
+	// void host_tick(int coreid); // removed the fifo this dequeued from in favor of calling get_to_host directly
+	void check_stdin_for_bcd(); // was device_tick, now it just does what it says
+	void check_from_host(int coreid); // was target_tick, now it just checks the fromhost fifo and updates mfromhost if necessary
 	void disable_stdout();
 
 private:

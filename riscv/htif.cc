@@ -156,29 +156,7 @@ void htif_isasim_t::register_enq_fromhost() {
 	set_write_from_host(enq_fromhost);
 }
 
-void htif_isasim_t::host_tick(int coreid) {
-	processor_t *proc = sim->procs[coreid];
-	if(proc->tohost_fifo.empty()) {
-		return;
-	}
-
-	// assertion: only 1 element in tohost FIFO
-	if(proc->tohost_fifo.size() != 1) {
-		fprintf(stderr, ">> WARNING: spike: there are %d (>1) elements in tohost FIFO of core %d\n",
-				proc->tohost_fifo.size(), coreid);
-	}
-
-	// get tohost & handle
-	reg_t val = proc->tohost_fifo.front();
-  
-  // [sizhuo] debug
-  //fprintf(stderr, ">> INFO: spike: get mtohost = 0x%016llx\n", (unsigned long long)val);
-
-	proc->tohost_fifo.pop();
-	get_to_host(val);
-}
-
-void htif_isasim_t::device_tick() {
+void htif_isasim_t::check_stdin_for_bcd() {
     device_t *bcd = device_list.get_bcd();
     if(bcd) {
         if(bcd->wait_for_stdin()) {
@@ -192,7 +170,7 @@ void htif_isasim_t::device_tick() {
     }
 }
 
-void htif_isasim_t::target_tick(int coreid) {
+void htif_isasim_t::check_from_host(int coreid) {
 	// deq fromhost FIFO to write mfromhost
 	processor_t *proc = sim->procs[coreid];
 	if(proc->fromhost_fifo.empty()) {

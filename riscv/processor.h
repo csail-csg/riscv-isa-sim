@@ -105,8 +105,7 @@ public:
   void register_insn(insn_desc_t);
   void register_extension(extension_t*);
   
-  // [sizhuo] to/from host FIFO
-  std::queue<reg_t> tohost_fifo;
+  // [sizhuo] from host FIFO
   std::queue<reg_t> fromhost_fifo;
 
 private:
