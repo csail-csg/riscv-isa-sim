@@ -37,6 +37,9 @@ public:
   // read one of the system control registers
   reg_t get_scr(int which);
 
+  // for tandem verification synchronization
+  void set_rtc(reg_t new_rtc) { rtc = new_rtc; }
+
 private:
   std::unique_ptr<htif_isasim_t> htif;
   char* mem; // main memory

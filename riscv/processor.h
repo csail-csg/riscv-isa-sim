@@ -83,6 +83,9 @@ public:
   void set_histogram(bool value);
   void reset(bool value);
   void step(size_t n); // run for n cycles
+  size_t step_synchronize(size_t n); // run for n steps without timer interrupts
+  bool try_step_synchronize(); // either execute an instruction or take a trap
+  void force_trap(reg_t which); // force a trap (such as a timer interrupt)
   bool running() { return run; }
   void set_csr(int which, reg_t val);
   void raise_interrupt(reg_t which);
@@ -129,6 +132,7 @@ private:
 
   void check_timer();
   void take_interrupt(); // take a trap if any interrupts are pending
+  void take_software_interrupt(); // take a software interrupt if pending
   void take_trap(trap_t& t, reg_t epc); // take an exception
   void disasm(insn_t insn); // disassemble and print an instruction
 

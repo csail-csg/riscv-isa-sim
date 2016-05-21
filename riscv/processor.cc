@@ -178,6 +178,23 @@ void processor_t::take_interrupt()
   }
 }
 
+void processor_t::take_software_interrupt()
+{
+  int priv = get_field(state.mstatus, MSTATUS_PRV);
+  int ie = get_field(state.mstatus, MSTATUS_IE);
+  reg_t interrupts = state.mie & state.mip;
+
+  if (priv < PRV_M || (priv == PRV_M && ie)) {
+    if (interrupts & MIP_MSIP)
+      raise_interrupt(IRQ_SOFT);
+  }
+
+  if (priv < PRV_S || (priv == PRV_S && ie)) {
+    if (interrupts & MIP_SSIP)
+      raise_interrupt(IRQ_SOFT);
+  }
+}
+
 void processor_t::check_timer()
 {
   if (sim->rtc >= state.mtimecmp)
