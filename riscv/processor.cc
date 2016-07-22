@@ -178,6 +178,24 @@ void processor_t::take_interrupt()
     raise_interrupt(ctz(enabled_interrupts));
 }
 
+void processor_t::take_deterministic_interrupt()
+{
+  reg_t pending_interrupts = state.mip & state.mie;
+  // MSIP, MTIP, and MEIP are all non-deterministic, so don't include them
+  pending_interrupts &= ~MIP_MSIP & ~MIP_MTIP & ~MIP_MEIP;
+
+  reg_t mie = get_field(state.mstatus, MSTATUS_MIE);
+  reg_t m_enabled = state.prv < PRV_M || (state.prv == PRV_M && mie);
+  reg_t enabled_interrupts = pending_interrupts & ~state.mideleg & -m_enabled;
+
+  reg_t sie = get_field(state.mstatus, MSTATUS_SIE);
+  reg_t s_enabled = state.prv < PRV_S || (state.prv == PRV_S && sie);
+  enabled_interrupts |= pending_interrupts & state.mideleg & -s_enabled;
+
+  if (enabled_interrupts)
+    raise_interrupt(ctz(enabled_interrupts));
+}
+
 static bool validate_priv(reg_t priv)
 {
   return priv == PRV_U || priv == PRV_S || priv == PRV_M;

@@ -155,3 +155,68 @@ miss:
     n -= instret;
   }
 }
+
+void processor_t::force_trap(reg_t which)
+{
+  reg_t pc = state.pc;
+  trap_t t(which);
+  take_trap(t, pc);
+}
+
+// n is the number of retired instructions + traps
+size_t processor_t::step_synchronize(size_t n)
+{
+  size_t instret = 0;
+  while (n > 0) {
+    if (try_step_synchronize()) {
+      instret++;
+    }
+    n--;
+  }
+  return instret;
+}
+
+// either execute an instruction or take a trap
+bool processor_t::try_step_synchronize()
+{
+  bool step_done = false;
+  bool instret = false;
+  while (!step_done) {
+    reg_t pc = state.pc;
+
+    try
+    {
+      // Only take deterministic interrupts
+      // All other interrupts should be triggered through force_trap()
+      take_deterministic_interrupt();
+
+      insn_fetch_t fetch = mmu->load_insn(pc);
+      pc = execute_insn(this, pc, fetch);
+
+      bool serialize_before = (pc == PC_SERIALIZE_BEFORE);
+      if (unlikely(invalid_pc(pc))) {
+        switch (pc) {
+          case PC_SERIALIZE_BEFORE: state.serialized = true; break;
+          case PC_SERIALIZE_AFTER:
+            instret = true;
+            step_done = true;
+            break;
+          default: abort();
+        }
+        pc = state.pc;
+      } else {
+        state.pc = pc;
+        instret = true;
+        step_done = true;
+      }
+    }
+    catch(trap_t& t)
+    {
+      take_trap(t, pc);
+      step_done = true;
+    }
+  }
+  if (instret)
+    state.minstret++;
+  return instret;
+}
