@@ -46,6 +46,7 @@ public:
 
 private:
 	sim_t *sim;
+
 	// function to enq from host
 	struct enq_fifo_func_t {
 		std::queue<reg_t> *fifo = NULL;
@@ -54,6 +55,24 @@ private:
 		}
 	};
 	enq_fifo_func_t enq_fromhost;
+
+    // memory
+    // function to DMA read mem
+    struct read_mem_t {
+        uint64_t *mem;
+        void operator()(addr_t addr, size_t len, void *dst) {
+            memcpy(dst, &(mem[addr / sizeof(uint64_t)]), len);
+        }
+    };
+    read_mem_t read_mem;
+    // function to DMA write mem
+    struct write_mem_t {
+        uint64_t *mem;
+        void operator()(addr_t addr, size_t len, const void *src) {
+            memcpy(&(mem[addr / sizeof(uint64_t)]), src, len);
+        }
+    };
+    write_mem_t write_mem;
 };
 
 #endif

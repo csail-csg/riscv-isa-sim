@@ -144,8 +144,11 @@ htif_isasim_t::htif_isasim_t(sim_t *_sim, const std::vector<std::string> &args) 
 	}
 
 	// set memory
-	set_mem((uint64_t*)(sim->mem), sim->memsz);
-
+    read_mem.mem = (uint64_t*)(sim->mem);
+    write_mem.mem = (uint64_t*)(sim->mem);
+	set_mem_size(sim->memsz);
+    set_dma_read(read_mem);
+    set_dma_write(write_mem);
 }
 
 void htif_isasim_t::register_enq_fromhost() {
