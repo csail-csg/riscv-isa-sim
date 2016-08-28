@@ -135,6 +135,7 @@ void sim_t::step(size_t n)
     current_step++;
     if (current_step == INTERLEAVE) {
       current_step = 0;
+      procs[current_proc]->yield_load_reservation(); // needed for multicore
       if (++current_proc == procs.size()) {
         current_proc = 0;
         rtc += INTERLEAVE / INSNS_PER_RTC_TICK;

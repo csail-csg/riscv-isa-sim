@@ -130,14 +130,14 @@ bool htif_isasim_t::done()
 #endif
 
 htif_isasim_t::htif_isasim_t(sim_t *_sim, const std::vector<std::string> &args) : 
-	htif_riscy_t(args), 
+	htif_riscy_t(args, _sim->procs.size()), 
 	sim(_sim)
 {
 	// assertion on 8B alignment & core num
-	if(sim->num_cores() != 1) {
-		fprintf(stderr, ">> ERROR: spike: should only run 1 core for riscy\n");
-		exit(1);
-	}
+	//if(sim->num_cores() != 1) {
+	//	fprintf(stderr, ">> ERROR: spike: should only run 1 core for riscy\n");
+	//	exit(1);
+	//}
 	if(((uint64_t)(sim->mem)) & 0x07ULL) {
 		fprintf(stderr, ">> ERROR: spike: memory allocated by is not 8B aligned\n");
 		exit(1);
@@ -151,12 +151,18 @@ htif_isasim_t::htif_isasim_t(sim_t *_sim, const std::vector<std::string> &args) 
     set_dma_write(write_mem);
 }
 
+void htif_isasim_t::enq_fromhost(uint32_t coreid, reg_t x) {
+    if(coreid >= sim->procs.size()) {
+        fprintf(stderr, ">> ERROR: spike: enq to core %d while total %d cores\n",
+                (int)coreid, int(sim->procs.size()));
+    }
+    sim->procs[coreid]->fromhost_fifo.push(x);
+}
+
 void htif_isasim_t::register_enq_fromhost() {
 	// set write fromhost function
 	// must be done after processors are created
-	// current htif_riscy_t only allows set for core 0
-	enq_fromhost.fifo = &(sim->procs[0]->fromhost_fifo);
-	set_write_from_host(enq_fromhost);
+	set_write_from_host(std::bind(&htif_isasim_t::enq_fromhost, this, std::placeholders::_1, std::placeholders::_2));
 }
 
 void htif_isasim_t::check_stdin_for_bcd() {

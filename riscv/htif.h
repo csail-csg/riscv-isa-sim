@@ -6,7 +6,6 @@
 // [sizhuo] do our own HTIF
 //#include <fesvr/htif_pthread.h>
 #include "htif_riscy.h"
-#include <queue>
 
 class sim_t;
 struct packet;
@@ -36,25 +35,19 @@ private:
 
 class htif_isasim_t : public htif_riscy_t {
 public:
-	htif_isasim_t(sim_t *_sim, const std::vector<std::string>& args);
-	~htif_isasim_t() {}
-	void register_enq_fromhost();
-	// void host_tick(int coreid); // removed the fifo this dequeued from in favor of calling get_to_host directly
-	void check_stdin_for_bcd(); // was device_tick, now it just does what it says
-	void check_from_host(int coreid); // was target_tick, now it just checks the fromhost fifo and updates mfromhost if necessary
-	void disable_stdout();
+    htif_isasim_t(sim_t *_sim, const std::vector<std::string>& args);
+    ~htif_isasim_t() {}
+    void register_enq_fromhost();
+    // void host_tick(int coreid); // removed the fifo this dequeued from in favor of calling get_to_host directly
+    void check_stdin_for_bcd(); // was device_tick, now it just does what it says
+    void check_from_host(int coreid); // was target_tick, now it just checks the fromhost fifo and updates mfromhost if necessary
+    void disable_stdout();
 
 private:
-	sim_t *sim;
+    sim_t *sim;
 
-	// function to enq from host
-	struct enq_fifo_func_t {
-		std::queue<reg_t> *fifo = NULL;
-		void operator()(reg_t x) {
-			fifo->push(x);
-		}
-	};
-	enq_fifo_func_t enq_fromhost;
+    // function to enq from host
+    void enq_fromhost(uint32_t coreid, reg_t x);
 
     // memory
     // function to DMA read mem

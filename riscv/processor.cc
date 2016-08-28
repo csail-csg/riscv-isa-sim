@@ -402,7 +402,7 @@ void processor_t::set_csr(int which, reg_t val)
     case CSR_SEND_IPI: sim->send_ipi(val); break;
     case CSR_MTOHOST:
       if (val != 0) {
-        sim->get_htif()->get_to_host(val);
+        sim->get_htif()->get_to_host(id, val);
       }
       break;
     case CSR_MFROMHOST: state.fromhost = val; break;
