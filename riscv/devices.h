@@ -2,6 +2,7 @@
 #define _RISCV_DEVICES_H
 
 #include "decode.h"
+#include <cstdio>
 #include <map>
 #include <vector>
 
@@ -32,6 +33,29 @@ class rom_device_t : public abstract_device_t {
   const std::vector<char>& contents() { return data; }
  private:
   std::vector<char> data;
+};
+
+class uart_t : public abstract_device_t {
+    public:
+        uart_t() {
+            chars = 0;
+        }
+        bool load(reg_t addr, size_t len, uint8_t* bytes) {
+            return false;
+        }
+        bool store(reg_t addr, size_t len, const uint8_t* bytes) {
+            chars++;
+            char c = bytes[0];
+            fprintf(stderr, "%c", c);
+            if (chars >= charlimit) {
+                fprintf(stderr, "charlimit reached\n");
+                // exit(1);
+            }
+            return true;
+        }
+    private:
+        int chars;
+        const int charlimit = 1000;
 };
 
 class rtc_t : public abstract_device_t {

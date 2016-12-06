@@ -41,7 +41,7 @@ sim_t::sim_t(const char* isa, size_t nprocs, size_t mem_mb, bool halted,
     fprintf(stderr, "warning: only got %lu bytes of target mem (wanted %lu)\n",
             (unsigned long)memsz, (unsigned long)memsz0);
 
-  bus.add_device(DEBUG_START, &debug_module);
+  bus.add_device(0x40000020, new uart_t());
 
   debug_mmu = new mmu_t(this, NULL);
 
@@ -152,60 +152,11 @@ bool sim_t::mmio_store(reg_t addr, size_t len, const uint8_t* bytes)
 
 void sim_t::make_config_string()
 {
-  reg_t rtc_addr = EXT_IO_BASE;
-  bus.add_device(rtc_addr, rtc.get());
+  // mcu-class riscy processor has no config string
 
-  const int align = 0x1000;
-  reg_t cpu_addr = rtc_addr + ((rtc->size() - 1) / align + 1) * align;
-  reg_t cpu_size = align;
-
-  uint32_t reset_vec[8] = {
-    0x297 + DRAM_BASE - DEFAULT_RSTVEC, // reset vector
-    0x00028067,                         //   jump straight to DRAM_BASE
-    0x00000000,                         // reserved
-    0,                                  // config string pointer
-    0, 0, 0, 0                          // trap vector
-  };
-  reset_vec[3] = DEFAULT_RSTVEC + sizeof(reset_vec); // config string pointer
-
-  std::vector<char> rom((char*)reset_vec, (char*)reset_vec + sizeof(reset_vec));
-
-  std::stringstream s;
-  s << std::hex <<
-        "platform {\n"
-        "  vendor ucb;\n"
-        "  arch spike;\n"
-        "};\n"
-        "rtc {\n"
-        "  addr 0x" << rtc_addr << ";\n"
-        "};\n"
-        "ram {\n"
-        "  0 {\n"
-        "    addr 0x" << DRAM_BASE << ";\n"
-        "    size 0x" << memsz << ";\n"
-        "  };\n"
-        "};\n"
-        "core {\n";
-  for (size_t i = 0; i < procs.size(); i++) {
-    s <<
-        "  " << i << " {\n"
-        "    " << "0 {\n" << // hart 0 on core i
-        "      isa " << procs[i]->isa_string << ";\n"
-        "      timecmp 0x" << (rtc_addr + 8*(1+i)) << ";\n"
-        "      ipi 0x" << cpu_addr << ";\n"
-        "    };\n"
-        "  };\n";
-    bus.add_device(cpu_addr, procs[i]);
-    cpu_addr += cpu_size;
-  }
-  s <<  "};\n";
-
-  config_string = s.str();
-  rom.insert(rom.end(), config_string.begin(), config_string.end());
-  rom.resize((rom.size() / align + 1) * align);
-
-  boot_rom.reset(new rom_device_t(rom));
-  bus.add_device(DEFAULT_RSTVEC, boot_rom.get());
+  // TODO: add the rtc back once it is supported
+  // reg_t rtc_addr = EXT_IO_BASE;
+  // bus.add_device(rtc_addr, rtc.get());
 }
 
 // htif
