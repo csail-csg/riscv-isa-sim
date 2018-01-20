@@ -6,6 +6,7 @@ clint_t::clint_t(std::vector<processor_t*>& procs)
 {
 }
 
+// Here are the hard-coded offsets for msip/mtimecmp/mtime within this device.
 /* 0000 msip hart 0
  * 0004 msip hart 1
  * 4000 mtimecmp hart 0 lo

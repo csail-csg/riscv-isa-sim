@@ -16,6 +16,8 @@ class abstract_device_t {
   virtual ~abstract_device_t() {}
 };
 
+// This is a mapping from (negative)base addr to device ptr. Load/Store to bus
+// will be redirected to the right device.
 class bus_t : public abstract_device_t {
  public:
   bool load(reg_t addr, size_t len, uint8_t* bytes);
@@ -38,6 +40,7 @@ class rom_device_t : public abstract_device_t {
   std::vector<char> data;
 };
 
+// DRAM memory. DRAM_BASE is default to be 0x8000_0000 (see spike.cc)
 class mem_t : public abstract_device_t {
  public:
   mem_t(size_t size) : len(size) {
@@ -58,6 +61,7 @@ class mem_t : public abstract_device_t {
   size_t len;
 };
 
+// timer + inter-proc SW interrupt
 class clint_t : public abstract_device_t {
  public:
   clint_t(std::vector<processor_t*>&);
@@ -66,8 +70,11 @@ class clint_t : public abstract_device_t {
   size_t size() { return CLINT_SIZE; }
   void increment(reg_t inc);
  private:
+  // when accessing mtime and mtimecmp with MMIO, these regs are 64-bit wide.
   typedef uint64_t mtime_t;
   typedef uint64_t mtimecmp_t;
+  // when accessing msip (of each processor) with MMIO, these regs are 32-bit
+  // wide
   typedef uint32_t msip_t;
   std::vector<processor_t*>& procs;
   mtime_t mtime;
