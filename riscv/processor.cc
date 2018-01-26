@@ -15,6 +15,7 @@
 #include <limits.h>
 #include <stdexcept>
 #include <algorithm>
+#include <sstream>
 
 #undef STATE
 #define STATE state
@@ -31,6 +32,9 @@ processor_t::processor_t(const char* isa, sim_t* sim, uint32_t id,
   disassembler = new disassembler_t(max_xlen);
 
   reset();
+
+  // print state after reset
+  fprintf(stderr, "info: state after reset:\n%s", state.str().c_str());
 }
 
 processor_t::~processor_t()
@@ -122,6 +126,44 @@ void state_t::reset()
   tselect = 0;
   for (unsigned int i = 0; i < num_triggers; i++)
     mcontrol[i].type = 2;
+}
+
+std::string state_t::str()
+{
+  std::ostringstream os;
+  os << std::hex;
+  os << "pc = " << pc << std::endl;
+  for (int i = 0; i < NXPR; i++) {
+    os << "XPR[" << std::dec << i << "] = " <<
+      std::hex << XPR[i] << std::endl;
+  }
+  for (int i = 0; i < NFPR; i++) {
+    os << "FPR[" << std::dec << i << "] = " <<
+      std::hex << FPR[i].v << std::endl;
+  }
+  os << "prv = " << prv << std::endl;
+  os << "mstatus = " << mstatus << std::endl;
+  os << "mepc = " << mepc << std::endl;
+  os << "mbadaddr = " << mbadaddr << std::endl;
+  os << "mscratch = " << mscratch << std::endl;
+  os << "mtvec = " << mtvec << std::endl;
+  os << "mcause = " << mcause << std::endl;
+  os << "minstret = " << minstret << std::endl;
+  os << "mie = " << mie << std::endl;
+  os << "mip = " << mip << std::endl;
+  os << "medeleg = " << medeleg << std::endl;
+  os << "mideleg = " << mideleg << std::endl;
+  os << "mcounteren = " << mcounteren << std::endl;
+  os << "scounteren = " << scounteren << std::endl;
+  os << "sepc = " << sepc << std::endl;
+  os << "sbadaddr = " << sbadaddr << std::endl;
+  os << "sscratch = " << sscratch << std::endl;
+  os << "stvec = " << stvec << std::endl;
+  os << "sptbr = " << sptbr << std::endl;
+  os << "scause = " << scause << std::endl;
+  os << "fflags = " << fflags << std::endl;
+  os << "frm = " << frm << std::endl;
+  return os.str();
 }
 
 void processor_t::set_debug(bool value)

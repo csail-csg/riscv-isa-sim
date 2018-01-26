@@ -311,6 +311,8 @@ void sim_t::make_dtb()
 
   boot_rom.reset(new rom_device_t(rom));
   bus.add_device(DEFAULT_RSTVEC, boot_rom.get());
+
+  fprintf(stderr, "info: boot rom size = %d\n", int(boot_rom->contents().size()));
 }
 
 char* sim_t::addr_to_mem(reg_t addr) {

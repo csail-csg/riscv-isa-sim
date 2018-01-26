@@ -86,6 +86,7 @@ typedef struct
 struct state_t
 {
   void reset();
+  std::string str(); // get printable string
 
   static const int num_triggers = 4;
 
