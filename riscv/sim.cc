@@ -265,7 +265,7 @@ void sim_t::make_dtb()
          "      status = \"okay\";\n"
          "      compatible = \"riscv\";\n"
          "      riscv,isa = \"" << procs[i]->isa_string << "\";\n"
-         "      mmu-type = \"riscv," << (procs[i]->max_xlen <= 32 ? "sv32" : "sv48") << "\";\n"
+         "      mmu-type = \"riscv," << (procs[i]->max_xlen <= 32 ? "sv32" : "sv39") << "\";\n"
          "      clock-frequency = <" << CPU_HZ << ">;\n"
          "      CPU" << i << "_intc: interrupt-controller {\n"
          "        #interrupt-cells = <1>;\n"
@@ -312,6 +312,7 @@ void sim_t::make_dtb()
   boot_rom.reset(new rom_device_t(rom));
   bus.add_device(DEFAULT_RSTVEC, boot_rom.get());
 
+  fprintf(stderr, "info: dts:\n%s", dts.c_str());
   fprintf(stderr, "info: boot rom size = %d\n", int(boot_rom->contents().size()));
 }
 

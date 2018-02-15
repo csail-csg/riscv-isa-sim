@@ -525,6 +525,13 @@ void processor_t::set_csr(int which, reg_t val)
     case CSR_DSCRATCH:
       state.dscratch = val;
       break;
+    // [sizhuo] non-standard CSRs
+    case CSR_TERMINATE:
+      fprintf(stderr, "Writing %lld to terminate CSR, exit\n", (long long)val);
+      exit(int(val));
+      break;
+    case CSR_STATS:
+      break;
   }
 }
 
@@ -672,6 +679,10 @@ reg_t processor_t::get_csr(int which)
       return state.dpc;
     case CSR_DSCRATCH:
       return state.dscratch;
+    // [sizhuo] non-standard CSRs
+    case CSR_TERMINATE:
+    case CSR_STATS:
+      return 0;
   }
   throw trap_illegal_instruction(0);
 }

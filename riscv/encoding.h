@@ -959,6 +959,10 @@
 #define CSR_MHPMCOUNTER29H 0xb9d
 #define CSR_MHPMCOUNTER30H 0xb9e
 #define CSR_MHPMCOUNTER31H 0xb9f
+// [sizhuo] non-standard CSRs
+#define CSR_TERMINATE      0x800
+#define CSR_STATS          0x801
+////////////////////////////////
 #define CAUSE_MISALIGNED_FETCH 0x0
 #define CAUSE_FETCH_ACCESS 0x1
 #define CAUSE_ILLEGAL_INSTRUCTION 0x2
