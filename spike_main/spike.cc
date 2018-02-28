@@ -35,6 +35,7 @@ static void help()
   fprintf(stderr, "  --extlib=<name>       Shared library to load\n");
   fprintf(stderr, "  --rbb-port=<port>     Listen on <port> for remote bitbang connection\n");
   fprintf(stderr, "  --dump-dts  Print device tree string and exit\n");
+  fprintf(stderr, "  --untether-rom=<path> Specify rom binary for untether system\n");
   exit(1);
 }
 
@@ -81,6 +82,7 @@ int main(int argc, char** argv)
   std::unique_ptr<dcache_sim_t> dc;
   std::unique_ptr<cache_sim_t> l2;
   std::function<extension_t*()> extension;
+  std::string untether_rom; // rom for untether system (load program itself)
   const char* isa = DEFAULT_ISA;
   uint16_t rbb_port = 0;
   bool use_rbb = false;
@@ -110,13 +112,14 @@ int main(int argc, char** argv)
       exit(-1);
     }
   });
+  parser.option(0, "untether-rom", 1, [&](const char *s){untether_rom = s;});
 
   auto argv1 = parser.parse(argv);
   std::vector<std::string> htif_args(argv1, (const char*const*)argv + argc);
   if (mems.empty())
     mems = make_mems("2048");
 
-  sim_t s(isa, nprocs, halted, start_pc, mems, htif_args);
+  sim_t s(isa, nprocs, halted, start_pc, mems, untether_rom, htif_args);
   std::unique_ptr<remote_bitbang_t> remote_bitbang((remote_bitbang_t *) NULL);
   std::unique_ptr<jtag_dtm_t> jtag_dtm(new jtag_dtm_t(&s.debug_module));
   if (use_rbb) {

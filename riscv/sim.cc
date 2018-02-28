@@ -3,6 +3,7 @@
 #include "sim.h"
 #include "mmu.h"
 #include "remote_bitbang.h"
+#include "fesvr/elfloader.h"
 #include <map>
 #include <iostream>
 #include <sstream>
@@ -24,10 +25,11 @@ static void handle_signal(int sig)
 }
 
 sim_t::sim_t(const char* isa, size_t nprocs, bool halted, reg_t start_pc,
-             std::vector<std::pair<reg_t, mem_t*>> mems,
+             std::vector<std::pair<reg_t, mem_t*>> mems, std::string &rom,
              const std::vector<std::string>& args)
-  : htif_t(args), debug_module(this), mems(mems), procs(std::max(nprocs, size_t(1))),
-    start_pc(start_pc),
+  : htif_t(args, rom.empty()), // host loads program to mem if no untether rom
+    debug_module(this), mems(mems), procs(std::max(nprocs, size_t(1))),
+    start_pc(start_pc), untether_rom(rom),
     current_step(0), current_proc(0), debug(false), remote_bitbang(NULL)
 {
   signal(SIGINT, &handle_signal);
@@ -45,6 +47,9 @@ sim_t::sim_t(const char* isa, size_t nprocs, bool halted, reg_t start_pc,
 
   clint.reset(new clint_t(procs));
   bus.add_device(CLINT_BASE, clint.get());
+
+  mem_loader.reset(new mem_loader_t(this, (target_args())[0]));
+  bus.add_device(MEM_LOADER_BASE, mem_loader.get());
 }
 
 sim_t::~sim_t()
@@ -224,26 +229,57 @@ static std::string dts_compile(const std::string& dts)
   return dtb.str();
 }
 
+void sim_t::make_reset_vec(reg_t start_pc, std::vector<char> &rom) {
+  rom.clear();
+  if(untether_rom.empty()) {
+    // host will load memory, so use the default reset vector
+    const int reset_vec_size = 8;
+    uint32_t reset_vec[reset_vec_size] = {
+      0x297,                                      // auipc  t0,0x0
+      0x28593 + (reset_vec_size * 4 << 20),       // addi   a1, t0, &dtb
+      0xf1402573,                                 // csrr   a0, mhartid
+      get_core(0)->xlen == 32 ?
+        0x0182a283u :                             // lw     t0,24(t0)
+        0x0182b283u,                              // ld     t0,24(t0)
+      0x28067,                                    // jr     t0
+      0,
+      (uint32_t) (start_pc & 0xffffffff),
+      (uint32_t) (start_pc >> 32)
+    };
+    rom.insert(rom.end(), (char*)reset_vec,
+              (char*)reset_vec + reset_vec_size * sizeof(uint32_t));
+  }
+  else {
+    // load the untether rom program here
+    // first figure out the size
+    dummy_memif_t dummy_memif;
+    reg_t start_addr;
+    std::map<std::string, uint64_t> symbols = load_elf(
+        untether_rom.c_str(), &dummy_memif, &start_addr);
+    auto it = symbols.find("_end");
+    if (it == symbols.end()) {
+      throw std::runtime_error("No symbol _end in untether rom program");
+    }
+    uint64_t end_addr = it->second;
+    uint64_t reset_vec_size = end_addr - start_addr;
+    fprintf(stderr, "info: untether boot rom: "
+            "start %016llx, end %016llx, size %d\n",
+            (long long unsigned)start_addr,
+            (long long unsigned)end_addr,
+            (int)reset_vec_size);
+    // now do the real copy
+    rom.resize(reset_vec_size, 0);
+    blob_memif_t blob_memif(&(rom[0]), start_addr, reset_vec_size);
+    load_elf(untether_rom.c_str(), &blob_memif, &start_addr);
+  }
+}
+
 void sim_t::make_dtb()
 {
-  const int reset_vec_size = 8;
+  std::vector<char> rom;
 
   start_pc = start_pc == reg_t(-1) ? get_entry_point() : start_pc;
-
-  uint32_t reset_vec[reset_vec_size] = {
-    0x297,                                      // auipc  t0,0x0
-    0x28593 + (reset_vec_size * 4 << 20),       // addi   a1, t0, &dtb
-    0xf1402573,                                 // csrr   a0, mhartid
-    get_core(0)->xlen == 32 ?
-      0x0182a283u :                             // lw     t0,24(t0)
-      0x0182b283u,                              // ld     t0,24(t0)
-    0x28067,                                    // jr     t0
-    0,
-    (uint32_t) (start_pc & 0xffffffff),
-    (uint32_t) (start_pc >> 32)
-  };
-
-  std::vector<char> rom((char*)reset_vec, (char*)reset_vec + sizeof(reset_vec));
+  make_reset_vec(start_pc, rom);
 
   std::stringstream s;
   s << std::dec <<

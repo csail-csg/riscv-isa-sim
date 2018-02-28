@@ -2,6 +2,7 @@
 #define _RISCV_DEVICES_H
 
 #include "decode.h"
+#include "fesvr/memif.h"
 #include <cstdlib>
 #include <string>
 #include <map>
@@ -79,6 +80,25 @@ class clint_t : public abstract_device_t {
   std::vector<processor_t*>& procs;
   mtime_t mtime;
   std::vector<mtimecmp_t> mtimecmp;
+};
+
+class sim_t;
+class mem_loader_t : public abstract_device_t {
+ public:
+  mem_loader_t(sim_t *sim, const std::string &elf);
+  virtual bool load(reg_t addr, size_t len, uint8_t* bytes);
+  virtual bool store(reg_t addr, size_t len, const uint8_t* bytes);
+  virtual ~mem_loader_t() {}
+
+ private:
+  memif_t mem;
+  std::string elf;
+  // MMIO accessible regs
+  reg_t mem_addr; // target mem addr to start loading elf
+  reg_t busy; // whether loader is still working
+  // after loading memory, we wait for certain spins on busy before we reset
+  // busy bit
+  int spins_on_busy;
 };
 
 #endif
