@@ -33,7 +33,7 @@ public:
         }
     }
 
-    T consume() {
+    T& consume() {
         int idx = consume_buffer->consume_idx;
         // check if we need to switch buffer
         if(idx >= consume_buffer->produce_idx) {

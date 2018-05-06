@@ -186,9 +186,16 @@ public:
 
   // [sizhuo] dump inst trace to performance model
   void trace_inst(uint32_t i) {
+    // rs1, rs2, rs3, rd should have already been set
     if(inst_trace) {
-        inst_trace->produce(traced_inst_t(traced_inst_t::Inst, uint32_t(i)));
+        cur_trace.inst = i;
+        inst_trace->produce(cur_trace);
     }
+    // clear rs1 rs2 rs3 rd (0 means invalid reg)
+    cur_trace.rs1 = 0;
+    cur_trace.rs2 = 0;
+    cur_trace.rs3 = 0;
+    cur_trace.rd = 0;
   }
 
   void register_insn(insn_desc_t);
@@ -293,6 +300,9 @@ public:
   }
 
   void trigger_updated();
+
+  // [sizhuo] current inst trace
+  traced_inst_t cur_trace;
 
 private:
   sim_t* sim;

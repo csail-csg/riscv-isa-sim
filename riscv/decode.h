@@ -68,8 +68,14 @@ struct traced_inst_t {
     enum Type {Inst, Terminate, BeginStats, EndStats};
     Type type;
     uint32_t inst;
-    traced_inst_t() : type(Inst), inst(0) {}
-    traced_inst_t(Type t, uint32_t i) : type(t), inst(i) {}
+    uint8_t rs1;
+    uint8_t rs2;
+    uint8_t rs3;
+    uint8_t rd;
+    traced_inst_t() :
+        type(Inst), inst(0), rs1(0), rs2(0), rs3(0), rd(0) {}
+    traced_inst_t(Type t, uint32_t i) :
+        type(t), inst(i), rs1(0), rs2(0), rs3(0), rd(0) {}
 };
 
 class insn_t
@@ -138,9 +144,10 @@ private:
 #define STATE (*p->get_state())
 #define READ_REG(reg) STATE.XPR[reg]
 #define READ_FREG(reg) STATE.FPR[reg]
-#define RS1 READ_REG(insn.rs1())
-#define RS2 READ_REG(insn.rs2())
-#define WRITE_RD(value) WRITE_REG(insn.rd(), value)
+// [sizhuo] we trace integer rs1/rs2/rd here
+#define RS1 READ_REG((p->cur_trace.rs1 = insn.rs1()))
+#define RS2 READ_REG((p->cur_trace.rs2 = insn.rs2()))
+#define WRITE_RD(value) WRITE_REG((p->cur_trace.rd = insn.rd()), value)
 
 #ifndef RISCV_ENABLE_COMMITLOG
 # define WRITE_REG(reg, value) STATE.XPR.write(reg, value)
@@ -171,13 +178,14 @@ private:
 #define RVC_SP READ_REG(X_SP)
 
 // FPU macros
-#define FRS1 READ_FREG(insn.rs1())
-#define FRS2 READ_FREG(insn.rs2())
-#define FRS3 READ_FREG(insn.rs3())
+// [sizhuo] we trace FP rs1/rs2/rd here: reg = freg + 32
+#define FRS1 READ_FREG(((p->cur_trace.rs1 = insn.rs1() + 32) - 32))
+#define FRS2 READ_FREG(((p->cur_trace.rs2 = insn.rs2() + 32) - 32))
+#define FRS3 READ_FREG(((p->cur_trace.rs3 = insn.rs3() + 32) - 32))
 #define dirty_fp_state (STATE.mstatus |= MSTATUS_FS | (xlen == 64 ? MSTATUS64_SD : MSTATUS32_SD))
 #define dirty_ext_state (STATE.mstatus |= MSTATUS_XS | (xlen == 64 ? MSTATUS64_SD : MSTATUS32_SD))
 #define DO_WRITE_FREG(reg, value) (STATE.FPR.write(reg, value), dirty_fp_state)
-#define WRITE_FRD(value) WRITE_FREG(insn.rd(), value)
+#define WRITE_FRD(value) WRITE_FREG(((p->cur_trace.rd = insn.rd() + 32) - 32), value)
  
 #define SHAMT (insn.i_imm() & 0x3F)
 #define BRANCH_TARGET (pc + insn.sb_imm())
@@ -241,10 +249,12 @@ inline freg_t freg(float64_t f) { return { f.v }; }
 inline freg_t freg(freg_t f) { return f; }
 #define F64_SIGN ((decltype(freg_t::v))1 << 63)
 #define F32_SIGN ((decltype(freg_t::v))1 << 31)
-#define fsgnj32(a, b, n, x) \
-  f32((f32(a).v & ~F32_SIGN) | ((((x) ? f32(a).v : (n) ? F32_SIGN : 0) ^ f32(b).v) & F32_SIGN))
-#define fsgnj64(a, b, n, x) \
-  f64((f64(a).v & ~F64_SIGN) | ((((x) ? f64(a).v : (n) ? F64_SIGN : 0) ^ f64(b).v) & F64_SIGN))
+inline float32_t fsgnj32(freg_t a, freg_t b, bool n, bool x) {
+  return f32((f32(a).v & ~F32_SIGN) | ((((x) ? f32(a).v : (n) ? F32_SIGN : 0) ^ f32(b).v) & F32_SIGN));
+}
+inline float64_t fsgnj64(freg_t a, freg_t b, bool n, bool x) {
+  return f64((f64(a).v & ~F64_SIGN) | ((((x) ? f64(a).v : (n) ? F64_SIGN : 0) ^ f64(b).v) & F64_SIGN));
+}
 
 #define validate_csr(which, write) ({ \
   if (!STATE.serialized) return PC_SERIALIZE_BEFORE; \
