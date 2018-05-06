@@ -5,6 +5,7 @@
 #include "decode.h"
 #include "config.h"
 #include "devices.h"
+#include "sync_buffer.h"
 #include <string>
 #include <vector>
 #include <map>
@@ -161,7 +162,8 @@ static int cto(reg_t val)
 class processor_t : public abstract_device_t
 {
 public:
-  processor_t(const char* isa, sim_t* sim, uint32_t id, bool halt_on_reset=false);
+  processor_t(const char* isa, sim_t* sim, uint32_t id, bool halt_on_reset=false,
+              sync_buffer_t<traced_inst_t> *trace = nullptr);
   ~processor_t();
 
   void set_debug(bool value);
@@ -181,6 +183,13 @@ public:
   void yield_load_reservation() { state.load_reservation = (reg_t)-1; }
   void update_histogram(reg_t pc);
   const disassembler_t* get_disassembler() { return disassembler; }
+
+  // [sizhuo] dump inst trace to performance model
+  void trace_inst(uint32_t i) {
+    if(inst_trace) {
+        inst_trace->produce(traced_inst_t(traced_inst_t::Inst, uint32_t(i)));
+    }
+  }
 
   void register_insn(insn_desc_t);
   void register_extension(extension_t*);
@@ -305,6 +314,9 @@ private:
 
   static const size_t OPCODE_CACHE_SIZE = 8191;
   insn_desc_t opcode_cache[OPCODE_CACHE_SIZE];
+
+  // [sizhuo] sync buffer output to performance model
+  sync_buffer_t<traced_inst_t> *const inst_trace;
 
   void take_pending_interrupt() { take_interrupt(state.mip & state.mie); }
   void take_interrupt(reg_t mask); // take first enabled interrupt in mask

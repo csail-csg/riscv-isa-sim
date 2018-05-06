@@ -26,6 +26,7 @@ riscv_hdrs = \
 	debug_module.h \
 	remote_bitbang.h \
 	jtag_dtm.h \
+	sync_buffer.h \
 
 riscv_precompiled_hdrs = \
 	insn_template.h \

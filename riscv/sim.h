@@ -6,6 +6,7 @@
 #include "processor.h"
 #include "devices.h"
 #include "debug_module.h"
+#include "sync_buffer.h"
 #include <fesvr/htif.h>
 #include <fesvr/context.h>
 #include <vector>
@@ -21,7 +22,8 @@ class sim_t : public htif_t
 public:
   sim_t(const char* isa, size_t _nprocs,  bool halted, reg_t start_pc,
         std::vector<std::pair<reg_t, mem_t*>> mems,
-        const std::vector<std::string>& args);
+        const std::vector<std::string>& args,
+        sync_buffer_t<traced_inst_t>** trace = nullptr);
   ~sim_t();
 
   // run the simulation to completion

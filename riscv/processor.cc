@@ -21,9 +21,9 @@
 #define STATE state
 
 processor_t::processor_t(const char* isa, sim_t* sim, uint32_t id,
-        bool halt_on_reset)
+        bool halt_on_reset, sync_buffer_t<traced_inst_t> *trace)
   : debug(false), halt_request(false), sim(sim), ext(NULL), id(id),
-  halt_on_reset(halt_on_reset)
+  halt_on_reset(halt_on_reset), inst_trace(trace)
 {
   parse_isa_string(isa);
   register_base_instructions();
@@ -527,10 +527,20 @@ void processor_t::set_csr(int which, reg_t val)
       break;
     // [sizhuo] non-standard CSRs
     case CSR_TERMINATE:
-      fprintf(stderr, "Writing %lld to terminate CSR, exit\n", (long long)val);
-      exit(int(val));
+      if(!inst_trace) {
+          // terminate when we are not in tracing mode
+          fprintf(stderr, "Writing %lld to terminate CSR, stopping ...\n", (long long)val);
+          exit(0);
+      } else {
+          fprintf(stderr, "Writing %lld to terminate CSR, keep tracing ...\n", (long long)val);
+          inst_trace->produce(traced_inst_t(traced_inst_t::Terminate, 0));
+      }
       break;
     case CSR_STATS:
+      if(inst_trace) {
+          traced_inst_t::Type t = val == 0 ? traced_inst_t::EndStats : traced_inst_t::BeginStats;
+          inst_trace->produce(traced_inst_t(t, 0));
+      }
       break;
   }
 }

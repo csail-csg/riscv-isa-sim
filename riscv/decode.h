@@ -63,6 +63,15 @@ const int NCSR = 4096;
 #define PC_ALIGN 2
 
 typedef uint64_t insn_bits_t;
+
+struct traced_inst_t {
+    enum Type {Inst, Terminate, BeginStats, EndStats};
+    Type type;
+    uint32_t inst;
+    traced_inst_t() : type(Inst), inst(0) {}
+    traced_inst_t(Type t, uint32_t i) : type(t), inst(i) {}
+};
+
 class insn_t
 {
 public:
