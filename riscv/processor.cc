@@ -533,13 +533,13 @@ void processor_t::set_csr(int which, reg_t val)
           exit(0);
       } else {
           fprintf(stderr, "Writing %lld to terminate CSR, keep tracing ...\n", (long long)val);
-          inst_trace->produce(traced_inst_t(traced_inst_t::Terminate, 0));
       }
       break;
     case CSR_STATS:
-      if(inst_trace) {
-          traced_inst_t::Type t = val == 0 ? traced_inst_t::EndStats : traced_inst_t::BeginStats;
-          inst_trace->produce(traced_inst_t(t, 0));
+      if(val == 0) {
+          cur_trace.end_stats = true;
+      } else {
+          cur_trace.begin_stats = true;
       }
       break;
   }

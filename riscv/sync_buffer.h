@@ -33,6 +33,8 @@ public:
         }
     }
 
+    // XXX the returned referece is guaranteed to be valid before the next call
+    // to consume
     T& consume() {
         int idx = consume_buffer->consume_idx;
         // check if we need to switch buffer

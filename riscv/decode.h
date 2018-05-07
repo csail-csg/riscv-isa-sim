@@ -65,17 +65,34 @@ const int NCSR = 4096;
 typedef uint64_t insn_bits_t;
 
 struct traced_inst_t {
-    enum Type {Inst, Terminate, BeginStats, EndStats};
-    Type type;
     uint32_t inst;
-    uint8_t rs1;
-    uint8_t rs2;
-    uint8_t rs3;
+    uint8_t rs[3];
     uint8_t rd;
+    bool begin_stats;
+    bool end_stats;
+
     traced_inst_t() :
-        type(Inst), inst(0), rs1(0), rs2(0), rs3(0), rd(0) {}
-    traced_inst_t(Type t, uint32_t i) :
-        type(t), inst(i), rs1(0), rs2(0), rs3(0), rd(0) {}
+        inst(0), rd(0), begin_stats(false), end_stats(false)
+    {
+        rs[0] = 0;
+        rs[1] = 0;
+        rs[2] = 0;
+    }
+    traced_inst_t(uint32_t i) :
+        inst(i), rd(0), begin_stats(false), end_stats(false)
+    {
+        rs[0] = 0;
+        rs[1] = 0;
+        rs[2] = 0;
+    }
+    void reset() {
+        rs[0] = 0;
+        rs[1] = 0;
+        rs[2] = 0;
+        rd = 0;
+        begin_stats = false;
+        end_stats = false;
+    }
 };
 
 class insn_t
@@ -145,8 +162,8 @@ private:
 #define READ_REG(reg) STATE.XPR[reg]
 #define READ_FREG(reg) STATE.FPR[reg]
 // [sizhuo] we trace integer rs1/rs2/rd here
-#define RS1 READ_REG((p->cur_trace.rs1 = insn.rs1()))
-#define RS2 READ_REG((p->cur_trace.rs2 = insn.rs2()))
+#define RS1 READ_REG((p->cur_trace.rs[1] = insn.rs1()))
+#define RS2 READ_REG((p->cur_trace.rs[2] = insn.rs2()))
 #define WRITE_RD(value) WRITE_REG((p->cur_trace.rd = insn.rd()), value)
 
 #ifndef RISCV_ENABLE_COMMITLOG
@@ -179,9 +196,9 @@ private:
 
 // FPU macros
 // [sizhuo] we trace FP rs1/rs2/rd here: reg = freg + 32
-#define FRS1 READ_FREG(((p->cur_trace.rs1 = insn.rs1() + 32) - 32))
-#define FRS2 READ_FREG(((p->cur_trace.rs2 = insn.rs2() + 32) - 32))
-#define FRS3 READ_FREG(((p->cur_trace.rs3 = insn.rs3() + 32) - 32))
+#define FRS1 READ_FREG(((p->cur_trace.rs[1] = insn.rs1() + 32) - 32))
+#define FRS2 READ_FREG(((p->cur_trace.rs[2] = insn.rs2() + 32) - 32))
+#define FRS3 READ_FREG(((p->cur_trace.rs[3] = insn.rs3() + 32) - 32))
 #define dirty_fp_state (STATE.mstatus |= MSTATUS_FS | (xlen == 64 ? MSTATUS64_SD : MSTATUS32_SD))
 #define dirty_ext_state (STATE.mstatus |= MSTATUS_XS | (xlen == 64 ? MSTATUS64_SD : MSTATUS32_SD))
 #define DO_WRITE_FREG(reg, value) (STATE.FPR.write(reg, value), dirty_fp_state)
