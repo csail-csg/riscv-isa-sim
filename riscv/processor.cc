@@ -684,6 +684,10 @@ reg_t processor_t::get_csr(int which)
     case CSR_STATS:
       return 0;
   }
+  // sanctum CSRs (tie to zero)
+  if (which >= 0x7c0 && which <= 0x7ca || which == 0xcc0) {
+      return 0;
+  }
   throw trap_illegal_instruction(0);
 }
 

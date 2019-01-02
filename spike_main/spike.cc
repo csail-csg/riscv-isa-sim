@@ -35,6 +35,7 @@ static void help()
   fprintf(stderr, "  --extlib=<name>       Shared library to load\n");
   fprintf(stderr, "  --rbb-port=<port>     Listen on <port> for remote bitbang connection\n");
   fprintf(stderr, "  --dump-dts  Print device tree string and exit\n");
+  fprintf(stderr, "  --rom-bin=<boot rom bin file> Boot rom binary file.\n");
   exit(1);
 }
 
@@ -84,6 +85,7 @@ int main(int argc, char** argv)
   const char* isa = DEFAULT_ISA;
   uint16_t rbb_port = 0;
   bool use_rbb = false;
+  const char *rom_bin_file = NULL;
 
   option_parser_t parser;
   parser.help(&help);
@@ -103,6 +105,7 @@ int main(int argc, char** argv)
   parser.option(0, "isa", 1, [&](const char* s){isa = s;});
   parser.option(0, "extension", 1, [&](const char* s){extension = find_extension(s);});
   parser.option(0, "dump-dts", 0, [&](const char *s){dump_dts = true;});
+  parser.option(0, "rom-bin", 1, [&](const char *s){rom_bin_file = s;});
   parser.option(0, "extlib", 1, [&](const char *s){
     void *lib = dlopen(s, RTLD_NOW | RTLD_GLOBAL);
     if (lib == NULL) {
@@ -116,7 +119,7 @@ int main(int argc, char** argv)
   if (mems.empty())
     mems = make_mems("2048");
 
-  sim_t s(isa, nprocs, halted, start_pc, mems, htif_args);
+  sim_t s(isa, nprocs, halted, start_pc, mems, rom_bin_file, htif_args);
   std::unique_ptr<remote_bitbang_t> remote_bitbang((remote_bitbang_t *) NULL);
   std::unique_ptr<jtag_dtm_t> jtag_dtm(new jtag_dtm_t(&s.debug_module));
   if (use_rbb) {

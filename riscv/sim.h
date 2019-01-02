@@ -21,6 +21,7 @@ class sim_t : public htif_t
 public:
   sim_t(const char* isa, size_t _nprocs,  bool halted, reg_t start_pc,
         std::vector<std::pair<reg_t, mem_t*>> mems,
+        const char *rom_bin,
         const std::vector<std::string>& args);
   ~sim_t();
 
@@ -44,6 +45,7 @@ private:
   mmu_t* debug_mmu;  // debug port into main memory
   std::vector<processor_t*> procs;
   reg_t start_pc;
+  const char *rom_bin_file; // boot rom binary file
   std::string dts;
   std::unique_ptr<rom_device_t> boot_rom;
   std::unique_ptr<clint_t> clint;
@@ -65,7 +67,7 @@ private:
   char* addr_to_mem(reg_t addr);
   bool mmio_load(reg_t addr, size_t len, uint8_t* bytes);
   bool mmio_store(reg_t addr, size_t len, const uint8_t* bytes);
-  void make_dtb();
+  void make_dtb(std::vector<char> &rom);
 
   // presents a prompt for introspection into the simulation
   void interactive();
