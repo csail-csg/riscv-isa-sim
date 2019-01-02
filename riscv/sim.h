@@ -22,6 +22,8 @@ public:
   sim_t(const char* isa, size_t _nprocs,  bool halted, reg_t start_pc,
         std::vector<std::pair<reg_t, mem_t*>> mems,
         const char *rom_bin,
+        const char *verify_log,
+        addr_t verify_terminate_pc,
         const std::vector<std::string>& args);
   ~sim_t();
 
@@ -106,6 +108,24 @@ private:
   void write_chunk(addr_t taddr, size_t len, const void* src);
   size_t chunk_align() { return 8; }
   size_t chunk_max_size() { return 8; }
+
+public:
+  // tandem verify (assume one core)
+  FILE *verify_log_fp;
+  addr_t verify_stop_pc; // stop verification at this pc
+  bool verify_stopped;
+  reg_t verify_icount; // may be different from minstret
+  bool verify(reg_t icount, reg_t pc, reg_t next_pc);
+  // helper to stop verification
+  void stop_verify() {
+    if (verify_log_fp) {
+      fclose(verify_log_fp);
+      verify_log_fp = NULL;
+    }
+    verify_stopped = true;
+  }
+
+  static sim_t *sim_verify; // singleton used for tandem verify
 };
 
 extern volatile bool ctrlc_pressed;

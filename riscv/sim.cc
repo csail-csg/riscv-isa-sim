@@ -26,10 +26,17 @@ static void handle_signal(int sig)
 sim_t::sim_t(const char* isa, size_t nprocs, bool halted, reg_t start_pc,
              std::vector<std::pair<reg_t, mem_t*>> mems,
              const char *rom_bin,
+             const char *verify_log,
+             addr_t verify_terminate_pc,
              const std::vector<std::string>& args)
   : htif_t(args), debug_module(this), mems(mems), procs(std::max(nprocs, size_t(1))),
     start_pc(start_pc), rom_bin_file(rom_bin),
-    current_step(0), current_proc(0), debug(false), remote_bitbang(NULL)
+    current_step(0), current_proc(0), debug(false), remote_bitbang(NULL),
+    // tandem verify
+    verify_log_fp(NULL),
+    verify_stop_pc(verify_terminate_pc),
+    verify_stopped(false),
+    verify_icount(0)
 {
   signal(SIGINT, &handle_signal);
 
@@ -46,6 +53,14 @@ sim_t::sim_t(const char* isa, size_t nprocs, bool halted, reg_t start_pc,
 
   clint.reset(new clint_t(procs));
   bus.add_device(CLINT_BASE, clint.get());
+
+  if (verify_log) {
+      verify_log_fp = fopen(verify_log, "w");
+      if (!verify_log_fp) {
+          fprintf(stderr, "Fail to open %s\n", verify_log);
+          exit(-1);
+      }
+  }
 }
 
 sim_t::~sim_t()
@@ -89,7 +104,8 @@ void sim_t::step(size_t n)
   for (size_t i = 0, steps = 0; i < n; i += steps)
   {
     steps = std::min(n - i, INTERLEAVE - current_step);
-    procs[current_proc]->step(steps);
+    bool unused;
+    procs[current_proc]->step(steps, unused);
 
     current_step += steps;
     if (current_step == INTERLEAVE)
@@ -376,3 +392,73 @@ void sim_t::write_chunk(addr_t taddr, size_t len, const void* src)
   memcpy(&data, src, sizeof data);
   debug_mmu->store_uint64(taddr, data);
 }
+
+bool sim_t::verify(reg_t icount, reg_t pc, reg_t next_pc) {
+    // assume only 1 core
+    processor_t *cur_proc = procs[0];
+
+    if (unlikely(verify_stopped)) {
+        return true;
+    }
+
+    // log verification
+    if (likely(verify_log_fp != NULL)) {
+        fprintf(verify_log_fp, "icount %llu, pc %016llx, next pc %016llx\n",
+                (long long unsigned)icount,
+                (long long unsigned)pc,
+                (long long unsigned)next_pc);
+    }
+
+    // check in M mode
+    if (unlikely(cur_proc->state.prv != PRV_M)) {
+        fprintf(stderr, "[TANDEM VERIFY] ERROR: in Non-M mode %lld\n",
+                (long long unsigned)(cur_proc->state.prv));
+        stop_verify();
+        return false;
+    }
+    // check icount match
+    if (unlikely(icount != verify_icount)) {
+        fprintf(stderr, "[TANDEM VERIFY] ERROR: icount should be %llu\n",
+                (long long unsigned)verify_icount);
+        stop_verify();
+        return false;
+    }
+    // check pc
+    if (unlikely(pc != cur_proc->state.pc)) {
+        fprintf(stderr, "[TANDEM VERIFY] ERROR: pc should be %016llx\n",
+                (long long unsigned)(cur_proc->state.pc));
+        stop_verify();
+        return false;
+    }
+    // check stop
+    if (unlikely(pc == verify_stop_pc)) {
+        fprintf(stderr, "[TANDEM VERIFY] Stop at pc %016llx\n",
+                (long long unsigned)pc);
+        stop_verify();
+        return true;
+    }
+
+    // step 1 inst
+    bool trapped = false;
+    cur_proc->step(1, trapped);
+    verify_icount++;
+
+    // check no trap
+    if (unlikely(trapped)) {
+        fprintf(stderr, "[TANDEM VERIFY] ERROR: unexpected trap\n");
+        stop_verify();
+        return false;
+    }
+    // check next pc
+    if (unlikely(next_pc != cur_proc->state.pc)) {
+        fprintf(stderr, "[TANDEM VERIFY] ERROR: next pc should be %016llx\n",
+                (long long unsigned)(cur_proc->state.pc));
+        stop_verify();
+        return false;
+    }
+
+    // everything looks good
+    return true;
+}
+
+static sim_t *sim_verify = NULL;

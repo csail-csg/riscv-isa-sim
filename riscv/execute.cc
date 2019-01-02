@@ -60,8 +60,10 @@ bool processor_t::slow_path()
 }
 
 // fetch/decode/execute loop
-void processor_t::step(size_t n)
+void processor_t::step(size_t n, bool &trapped)
 {
+  trapped = false; // default no trap taken
+
   if (state.dcsr.cause == DCSR_CAUSE_NONE) {
     if (halt_request) {
       enter_debug_mode(DCSR_CAUSE_DEBUGINT);
@@ -194,6 +196,7 @@ miss:
     catch(trap_t& t)
     {
       take_trap(t, pc);
+      trapped = true;
       n = instret;
 
       if (unlikely(state.single_step == state.STEP_STEPPED)) {
@@ -223,6 +226,7 @@ miss:
         case ACTION_DEBUG_EXCEPTION: {
           mem_trap_t trap(CAUSE_BREAKPOINT, t.address);
           take_trap(trap, pc);
+          trapped = true;
           break;
         }
         default:

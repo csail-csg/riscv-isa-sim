@@ -86,6 +86,8 @@ int main(int argc, char** argv)
   uint16_t rbb_port = 0;
   bool use_rbb = false;
   const char *rom_bin_file = NULL;
+  reg_t verify_stop_pc = 0;
+  const char *verify_log = NULL;
 
   option_parser_t parser;
   parser.help(&help);
@@ -119,7 +121,7 @@ int main(int argc, char** argv)
   if (mems.empty())
     mems = make_mems("2048");
 
-  sim_t s(isa, nprocs, halted, start_pc, mems, rom_bin_file, htif_args);
+  sim_t s(isa, nprocs, halted, start_pc, mems, rom_bin_file, verify_log, verify_stop_pc, htif_args);
   std::unique_ptr<remote_bitbang_t> remote_bitbang((remote_bitbang_t *) NULL);
   std::unique_ptr<jtag_dtm_t> jtag_dtm(new jtag_dtm_t(&s.debug_module));
   if (use_rbb) {
