@@ -24,12 +24,12 @@ static void handle_signal(int sig)
 }
 
 sim_t::sim_t(const char* isa, size_t nprocs, bool halted, reg_t start_pc,
-             std::vector<std::pair<reg_t, mem_t*>> mems,
+             std::vector<std::pair<reg_t, mem_t*>> _mems,
              const char *rom_bin,
              const char *verify_log,
              addr_t verify_terminate_pc,
              const std::vector<std::string>& args)
-  : htif_t(args), debug_module(this), mems(mems), procs(std::max(nprocs, size_t(1))),
+  : htif_t(args), debug_module(this), mems(_mems), procs(std::max(nprocs, size_t(1))),
     start_pc(start_pc), rom_bin_file(rom_bin),
     current_step(0), current_proc(0), debug(false), remote_bitbang(NULL),
     // tandem verify
@@ -461,4 +461,3 @@ bool sim_t::verify(reg_t icount, reg_t pc, reg_t next_pc) {
     return true;
 }
 
-static sim_t *sim_verify = NULL;

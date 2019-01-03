@@ -20,7 +20,7 @@ class sim_t : public htif_t
 {
 public:
   sim_t(const char* isa, size_t _nprocs,  bool halted, reg_t start_pc,
-        std::vector<std::pair<reg_t, mem_t*>> mems,
+        std::vector<std::pair<reg_t, mem_t*>> _mems,
         const char *rom_bin,
         const char *verify_log,
         addr_t verify_terminate_pc,
@@ -124,8 +124,6 @@ public:
     }
     verify_stopped = true;
   }
-
-  static sim_t *sim_verify; // singleton used for tandem verify
 };
 
 extern volatile bool ctrlc_pressed;
