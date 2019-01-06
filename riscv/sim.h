@@ -115,7 +115,12 @@ public:
   addr_t verify_stop_pc; // stop verification at this pc
   bool verify_stopped;
   reg_t verify_icount; // may be different from minstret
-  bool verify(reg_t icount, reg_t pc, reg_t next_pc);
+  bool verify(reg_t icount, reg_t pc, reg_t next_pc, uint32_t inst,
+              bool src1_valid, int src1_reg, reg_t src1_data,
+              bool src2_valid, int src2_reg, reg_t src2_data,
+              bool dst_valid, int dst_reg, reg_t dst_data,
+              bool is_ld, bool is_st, addr_t paddr, uint32_t align_be,
+              reg_t align_st_data, reg_t align_ld_data);
   // helper to stop verification
   void stop_verify() {
     if (verify_log_fp) {

@@ -393,7 +393,12 @@ void sim_t::write_chunk(addr_t taddr, size_t len, const void* src)
   debug_mmu->store_uint64(taddr, data);
 }
 
-bool sim_t::verify(reg_t icount, reg_t pc, reg_t next_pc) {
+bool sim_t::verify(reg_t icount, reg_t pc, reg_t next_pc, uint32_t inst,
+                   bool src1_valid, int src1_reg, reg_t src1_data,
+                   bool src2_valid, int src2_reg, reg_t src2_data,
+                   bool dst_valid, int dst_reg, reg_t dst_data,
+                   bool is_ld, bool is_st, addr_t paddr, uint32_t align_be,
+                   reg_t align_st_data, reg_t align_ld_data) {
     // assume only 1 core
     processor_t *cur_proc = procs[0];
 
@@ -403,10 +408,24 @@ bool sim_t::verify(reg_t icount, reg_t pc, reg_t next_pc) {
 
     // log verification
     if (likely(verify_log_fp != NULL)) {
-        fprintf(verify_log_fp, "icount %llu, pc %016llx, next pc %016llx\n",
+        fprintf(verify_log_fp,
+                "icount %llu, pc %016llx, next pc %016llx, inst %08x, "
+                "src1_valid %d, src1_reg %d, src1_data %016llx, "
+                "src2_valid %d, src2_reg %d, src2_data %016llx, "
+                "dst_valid %d, dst_reg %d, dst_data %016llx, "
+                "is_ld %d, is_st %d, paddr %016llx, align_be %02x, "
+                "align_st_data %016llx, align_ld_data %016llx\n",
                 (long long unsigned)icount,
                 (long long unsigned)pc,
-                (long long unsigned)next_pc);
+                (long long unsigned)next_pc,
+                (unsigned)inst,
+                (int)src1_valid, src1_reg, (long long unsigned)src1_data,
+                (int)src2_valid, src2_reg, (long long unsigned)src2_data,
+                (int)dst_valid, dst_reg, (long long unsigned)dst_data,
+                (int)is_ld, (int)is_st,
+                (long long unsigned)paddr, (unsigned)align_be,
+                (long long unsigned)align_st_data,
+                (long long unsigned)align_ld_data);
     }
 
     // check in M mode
@@ -437,6 +456,48 @@ bool sim_t::verify(reg_t icount, reg_t pc, reg_t next_pc) {
         stop_verify();
         return true;
     }
+    // check inst
+    uint32_t ref_inst = debug_mmu->load_uint32(pc);
+    if (unlikely(inst != ref_inst)) {
+        fprintf(stderr, "[TANDEM VERIFY] ERROR: inst should be %08x\n",
+                (unsigned)ref_inst);
+        stop_verify();
+        return false;
+    }
+    // check src values
+    if (src1_valid) {
+        assert(src1_reg >= 0 && src1_reg < NXPR);
+        reg_t val = cur_proc->state.XPR[src1_reg];
+        if (unlikely(src1_data != val)) {
+            fprintf(stderr, "[TANDEM VERIFY] ERROR: src1 data should be %016llx\n",
+                    (long long unsigned)val);
+            stop_verify();
+            return false;
+        }
+    }
+    if (src2_valid) {
+        assert(src2_reg >= 0 && src2_reg < NXPR);
+        reg_t val = cur_proc->state.XPR[src2_reg];
+        if (unlikely(src2_data != val)) {
+            fprintf(stderr, "[TANDEM VERIFY] ERROR: src2 data should be %016llx\n",
+                    (long long unsigned)val);
+            stop_verify();
+            return false;
+        }
+    }
+    // get memory value
+    reg_t mem_val = 0;
+    addr_t align_paddr = paddr & ~reg_t(0x07);
+    if (is_ld || is_st) {
+        assert(!(is_ld && is_st));
+        mem_val = debug_mmu->load_uint64(align_paddr);
+        if (unlikely(is_ld && align_ld_data != mem_val)) {
+            fprintf(stderr, "[TANDEM VERIFY] ERROR: Ld data should be %016llx\n",
+                    (long long unsigned)mem_val);
+            stop_verify();
+            return false;
+        }
+    }
 
     // step 1 inst
     bool trapped = false;
@@ -455,6 +516,40 @@ bool sim_t::verify(reg_t icount, reg_t pc, reg_t next_pc) {
                 (long long unsigned)(cur_proc->state.pc));
         stop_verify();
         return false;
+    }
+    // check dst reg value
+    if (dst_valid) {
+        assert(dst_reg >= 0 && dst_reg < NXPR);
+        reg_t val = cur_proc->state.XPR[dst_reg];
+        if (unlikely(dst_data != val)) {
+            fprintf(stderr, "[TANDEM VERIFY] ERROR: dst data should be %016llx\n",
+                    (long long unsigned)val);
+            stop_verify();
+            return false;
+        }
+    }
+    // check store value
+    if (is_st) {
+        reg_t ref_mem_val = debug_mmu->load_uint64(align_paddr);
+        // compute new mem val using store data
+        reg_t new_mem_val = mem_val;
+        uint8_t *p_mem = (uint8_t*)(&new_mem_val);
+        uint8_t *p_st = (uint8_t*)(&align_st_data);
+        for (int i = 0; i < sizeof(reg_t); i++) {
+            if ((align_be >> i) & 0x01) {
+                p_mem[i] = p_st[i];
+            }
+        }
+        if (unlikely(new_mem_val != ref_mem_val)) {
+            fprintf(stderr, "[TANDEM VERIFY] ERROR: St should change "
+                    "memory [%016llx] = %016llx to %016llx, but to %016llx\n",
+                    (long long unsigned)align_paddr,
+                    (long long unsigned)mem_val,
+                    (long long unsigned)ref_mem_val,
+                    (long long unsigned)new_mem_val);
+            stop_verify();
+            return false;
+        }
     }
 
     // everything looks good
