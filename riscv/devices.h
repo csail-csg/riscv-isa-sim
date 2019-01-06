@@ -43,10 +43,12 @@ class rom_device_t : public abstract_device_t {
 // DRAM memory. DRAM_BASE is default to be 0x8000_0000 (see spike.cc)
 class mem_t : public abstract_device_t {
  public:
-  mem_t(size_t size) : len(size) {
+  mem_t(size_t size, uint8_t init_val = 0) : len(size) {
     data = (char*)calloc(1, size);
     if (!data)
       throw std::runtime_error("couldn't allocate " + std::to_string(size) + " bytes of target memory");
+    // set init val
+    memset(data, init_val, size);
   }
   mem_t(const mem_t& that) = delete;
   ~mem_t() { free(data); }
