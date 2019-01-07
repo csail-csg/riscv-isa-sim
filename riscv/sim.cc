@@ -491,11 +491,20 @@ bool sim_t::verify(reg_t icount, reg_t pc, reg_t next_pc, uint32_t inst,
     if (is_ld || is_st) {
         assert(!(is_ld && is_st));
         mem_val = debug_mmu->load_uint64(align_paddr);
-        if (unlikely(is_ld && align_ld_data != mem_val)) {
-            fprintf(stderr, "[TANDEM VERIFY] ERROR: Ld data should be %016llx\n",
-                    (long long unsigned)mem_val);
-            stop_verify();
-            return false;
+        if (is_ld) {
+            uint8_t *p_ld = (uint8_t*)(&align_ld_data);
+            uint8_t *p_mem = (uint8_t*)(&mem_val);
+            for (int i = 0; i < sizeof(reg_t); i++) {
+                if ((align_be >> i) & 0x01) {
+                    if (unlikely(p_ld[i] != p_mem[i])) {
+                        fprintf(stderr, "[TANDEM VERIFY] ERROR: "
+                                "Ld data should be %016llx\n",
+                                (long long unsigned)mem_val);
+                        stop_verify();
+                        return false;
+                    }
+                }
+            }
         }
     }
 
