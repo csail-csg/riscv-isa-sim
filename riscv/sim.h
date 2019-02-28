@@ -23,7 +23,7 @@ public:
   sim_t(const char* isa, size_t _nprocs,  bool halted, reg_t start_pc,
         std::vector<std::pair<reg_t, mem_t*>> mems,
         const std::vector<std::string>& args,
-        int max_hits_in_dcache,
+        bool enable_dcache, int max_hits_in_dcache,
         sync_buffer_t<traced_inst_t>** trace = nullptr);
   ~sim_t();
 

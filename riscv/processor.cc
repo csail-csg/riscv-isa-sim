@@ -34,7 +34,7 @@ processor_t::processor_t(const char* isa, sim_t* sim, uint32_t id,
   reset();
 
   // print state after reset
-  fprintf(stderr, "info: state after reset:\n%s", state.str().c_str());
+  //fprintf(stderr, "info: state after reset:\n%s", state.str().c_str());
 }
 
 processor_t::~processor_t()

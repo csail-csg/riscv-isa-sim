@@ -35,7 +35,8 @@ static void help()
   fprintf(stderr, "  --extlib=<name>       Shared library to load\n");
   fprintf(stderr, "  --rbb-port=<port>     Listen on <port> for remote bitbang connection\n");
   fprintf(stderr, "  --dump-dts  Print device tree string and exit\n");
-  fprintf(stderr, "  --dcache-hits=<hits>  Enable self-invalidate write-through D$\n");
+  fprintf(stderr, "  --enable-dcache       Enable self-invlidate write-through D$\n");
+  fprintf(stderr, "  --dcache-hits=<hits>  Max hits in D$ before self invalidation, negative number means inifity\n");
   exit(1);
 }
 
@@ -75,6 +76,7 @@ int main(int argc, char** argv)
   bool histogram = false;
   bool log = false;
   bool dump_dts = false;
+  bool enable_dcache = false;
   int dcache_hits = -1;
   size_t nprocs = 1;
   reg_t start_pc = reg_t(-1);
@@ -105,6 +107,7 @@ int main(int argc, char** argv)
   parser.option(0, "isa", 1, [&](const char* s){isa = s;});
   parser.option(0, "extension", 1, [&](const char* s){extension = find_extension(s);});
   parser.option(0, "dump-dts", 0, [&](const char *s){dump_dts = true;});
+  parser.option(0, "enable-dcache", 0, [&](const char *s){enable_dcache = true;});
   parser.option(0, "dcache-hits", 1, [&](const char *s){dcache_hits = atoi(s);});
   parser.option(0, "extlib", 1, [&](const char *s){
     void *lib = dlopen(s, RTLD_NOW | RTLD_GLOBAL);
@@ -119,7 +122,7 @@ int main(int argc, char** argv)
   if (mems.empty())
     mems = make_mems("2048");
 
-  sim_t s(isa, nprocs, halted, start_pc, mems, htif_args, dcache_hits);
+  sim_t s(isa, nprocs, halted, start_pc, mems, htif_args, enable_dcache, dcache_hits);
   std::unique_ptr<remote_bitbang_t> remote_bitbang((remote_bitbang_t *) NULL);
   std::unique_ptr<jtag_dtm_t> jtag_dtm(new jtag_dtm_t(&s.debug_module));
   if (use_rbb) {

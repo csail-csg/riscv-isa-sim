@@ -115,8 +115,9 @@ public:
       hit_ram[index]++;
     }
     memcpy(dst, get_data_ptr((addr_t)addr), len);
-    // evict after certain number of hits
-    if (hit_ram[index] >= max_hits) {
+    // evict after certain number of hits (negative max_hits means no self
+    // eviction forever)
+    if (max_hits >= 0 && hit_ram[index] >= max_hits) {
       valid_ram[index] = false;
     }
     // check no cross line boundary
