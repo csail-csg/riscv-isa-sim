@@ -9,7 +9,8 @@ mmu_t::mmu_t(sim_t* sim, processor_t* proc)
   check_triggers_fetch(false),
   check_triggers_load(false),
   check_triggers_store(false),
-  matched_trigger(NULL)
+  matched_trigger(NULL),
+  dcache(sim->dcache_enabled, sim->dcache_max_hits)
 {
   flush_tlb();
 }
@@ -92,7 +93,7 @@ void mmu_t::load_slow_path(reg_t addr, reg_t len, uint8_t* bytes)
   reg_t paddr = translate(addr, LOAD);
 
   if (auto host_addr = sim->addr_to_mem(paddr)) {
-    memcpy(bytes, host_addr, len);
+    dcache.load(host_addr, len, (char*)bytes);
     if (tracer.interested_in_range(paddr, paddr + PGSIZE, LOAD))
       tracer.trace(paddr, len, LOAD);
     else
@@ -121,7 +122,7 @@ void mmu_t::store_slow_path(reg_t addr, reg_t len, const uint8_t* bytes)
   }
 
   if (auto host_addr = sim->addr_to_mem(paddr)) {
-    memcpy(host_addr, bytes, len);
+    dcache.store(host_addr, len, (const char*)bytes);
     if (tracer.interested_in_range(paddr, paddr + PGSIZE, STORE))
       tracer.trace(paddr, len, STORE);
     else
@@ -174,6 +175,9 @@ reg_t mmu_t::walk(reg_t addr, access_type type, reg_t mode)
   if (masked_msbs != 0 && masked_msbs != mask)
     vm.levels = 0;
 
+  // It matches our self-invalidation implementation by not using D$ to do page
+  // walk
+
   reg_t base = vm.ptbase;
   for (int i = vm.levels - 1; i >= 0; i--) {
     int ptshift = i * vm.idxbits;
@@ -204,6 +208,9 @@ reg_t mmu_t::walk(reg_t addr, access_type type, reg_t mode)
 #ifdef RISCV_ENABLE_DIRTY
       // set accessed and possibly dirty bits.
       *(uint32_t*)ppte |= ad;
+      // since D$ may have stale copy, we should evict it; currently we don't
+      // use dirty bit in hardware implementation
+      static_assert(false);
 #else
       // take exception if access or possibly dirty bit is not set.
       if ((pte & ad) != ad)

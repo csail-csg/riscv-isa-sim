@@ -26,10 +26,12 @@ static void handle_signal(int sig)
 sim_t::sim_t(const char* isa, size_t nprocs, bool halted, reg_t start_pc,
              std::vector<std::pair<reg_t, mem_t*>> mems,
              const std::vector<std::string>& args,
+             int max_hits_in_dcache,
              sync_buffer_t<traced_inst_t>** trace)
   : htif_t(args), debug_module(this), mems(mems), procs(std::max(nprocs, size_t(1))),
     start_pc(start_pc),
-    current_step(0), current_proc(0), debug(false), remote_bitbang(NULL)
+    current_step(0), current_proc(0), debug(false), remote_bitbang(NULL),
+    dcache_enabled(max_hits_in_dcache > 0), dcache_max_hits(max_hits_in_dcache)
 {
   signal(SIGINT, &handle_signal);
 
@@ -350,4 +352,6 @@ void sim_t::write_chunk(addr_t taddr, size_t len, const void* src)
   uint64_t data;
   memcpy(&data, src, sizeof data);
   debug_mmu->store_uint64(taddr, data);
+  // no need to evict lines from all D$s, because DMA is essentially another
+  // core
 }

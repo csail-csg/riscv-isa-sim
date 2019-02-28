@@ -23,6 +23,7 @@ public:
   sim_t(const char* isa, size_t _nprocs,  bool halted, reg_t start_pc,
         std::vector<std::pair<reg_t, mem_t*>> mems,
         const std::vector<std::string>& args,
+        int max_hits_in_dcache,
         sync_buffer_t<traced_inst_t>** trace = nullptr);
   ~sim_t();
 
@@ -62,6 +63,10 @@ private:
   bool log;
   bool histogram_enabled; // provide a histogram of PCs
   remote_bitbang_t* remote_bitbang;
+
+  // use self-inv write-through D$
+  const bool dcache_enabled;
+  const int dcache_max_hits;
 
   // memory-mapped I/O routines
   char* addr_to_mem(reg_t addr);

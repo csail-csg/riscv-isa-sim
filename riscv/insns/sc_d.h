@@ -7,3 +7,4 @@ if (RS1 == p->get_state()->load_reservation)
 }
 else
   WRITE_RD(1);
+if (insn.aq()) MMU.flush_dcache();

@@ -11,6 +11,7 @@
 #include "processor.h"
 #include "memtracer.h"
 #include <stdlib.h>
+#include <assert.h>
 #include <vector>
 
 // virtual memory configuration
@@ -46,6 +47,135 @@ class trigger_matched_t
     trigger_operation_t operation;
     reg_t address;
     reg_t data;
+};
+
+// A self-invalidate write-through D$. For simplicity, cache is direct-mapped.
+// This could allow reordering of dependent loads. We directly use the host
+// addr (i.e., pointer value in mem_t) as cache address.
+//
+// We use write-through to avoid issues related to coherece and page walk.
+class siwt_cache_t {
+public:
+  siwt_cache_t(bool enable, int hits) :
+    enabled(enable),
+    max_hits(hits),
+    data_ram(NULL),
+    valid_ram(NULL),
+    tag_ram(NULL),
+    hit_ram(NULL)
+  {
+    data_ram = (char*)calloc(1 << index_width, 1 << log_line_bytes);
+    if (!data_ram) {
+      throw std::runtime_error("cannot allocate D$ data");
+    }
+    tag_ram = (addr_t*)calloc(1 << index_width, sizeof(addr_t));
+    if (!tag_ram) {
+      throw std::runtime_error("cannot allocate D$ tag");
+    }
+    valid_ram = (bool*)calloc(1 << index_width, sizeof(bool));
+    if (!valid_ram) {
+      throw std::runtime_error("cannot allocate D$ valid");
+    }
+    hit_ram = (int*)calloc(1 << index_width, sizeof(int));
+    if (!hit_ram) {
+      throw std::runtime_error("cannot allocate D$ hit count");
+    }
+  }
+
+  ~siwt_cache_t() {
+    free(data_ram);
+    free(tag_ram);
+    free(valid_ram);
+    free(hit_ram);
+  }
+
+  inline void load(char* addr, reg_t len, char* dst) {
+    if (!enabled) {
+      memcpy(dst, addr, len);
+      return;
+    }
+    // check no cross line boundary
+    assert(get_offset((addr_t)addr) + len <= (1 << log_line_bytes));
+    // cache look up
+    addr_t index = get_index((addr_t)addr);
+    addr_t tag = get_tag((addr_t)addr);
+    if (valid_ram[index] && tag == tag_ram[index]) {
+      hit_ram[index]++;
+    }
+    else {
+      refill_line(addr, index, tag);
+    }
+    memcpy(dst, get_data_ptr((addr_t)addr), len);
+    // evict after certain number of hits
+    if (hit_ram[index] >= max_hits) {
+      valid_ram[index] = false;
+    }
+  }
+
+  inline void store(char* addr, reg_t len, const char* val) {
+    // write through
+    memcpy(addr, val, len);
+    if (!enabled) {
+      return;
+    }
+    // check no cross line boundary
+    assert(get_offset((addr_t)addr) + len <= (1 << log_line_bytes));
+    // evict written line to avoid subword problems
+    addr_t index = get_index((addr_t)addr);
+    addr_t tag = get_tag((addr_t)addr);
+    if (valid_ram[index] && tag == tag_ram[index]) {
+      valid_ram[index] = false;
+    }
+  }
+
+  inline void flush() {
+    if (!enabled) {
+      return;
+    }
+    memset(valid_ram, 0, 1 << index_width);
+  }
+
+private:
+  // 512KB cache, 64B line
+  static const int log_line_bytes = 6;
+  static const int index_width = 13;
+
+  static const addr_t index_mask = (addr_t(1) << index_width) - 1;
+  static const addr_t offset_mask = (addr_t(1) << log_line_bytes) - 1;
+  static const addr_t index_offset_mask = (addr_t(1) << (index_width + log_line_bytes)) - 1;
+
+  const bool enabled; // whether the cache is enabled or not
+
+  const int max_hits; // self-invalidate after a certain number of hits
+
+  char *data_ram;
+  bool *valid_ram;
+  addr_t *tag_ram;
+  int *hit_ram;
+
+  inline addr_t get_tag(addr_t addr) {
+    return addr >> (index_width + log_line_bytes);
+  }
+
+  inline addr_t get_index(addr_t addr) {
+    return (addr >> log_line_bytes) & index_mask;
+  }
+
+  inline addr_t get_offset(addr_t addr) {
+    return addr & offset_mask;
+  }
+
+  inline char* get_data_ptr(addr_t addr) {
+    return data_ram + (addr & index_offset_mask);
+  }
+
+  inline void refill_line(char* addr, addr_t index, addr_t tag) {
+    addr_t offset = get_offset((addr_t)addr);
+    memcpy(&data_ram[index << log_line_bytes], addr - offset, 1 << log_line_bytes);
+    valid_ram[index] = true;
+    tag_ram[index] = tag;
+    hit_ram[index] = 0;
+  }
 };
 
 // this class implements a processor's port into the virtual memory system.
@@ -84,10 +214,14 @@ public:
       if (unlikely(addr & (sizeof(type##_t)-1))) \
         return misaligned_load(addr, sizeof(type##_t)); \
       reg_t vpn = addr >> PGSHIFT; \
-      if (likely(tlb_load_tag[vpn % TLB_ENTRIES] == vpn)) \
-        return *(type##_t*)(tlb_data[vpn % TLB_ENTRIES].host_offset + addr); \
+      if (likely(tlb_load_tag[vpn % TLB_ENTRIES] == vpn)) { \
+        type##_t data = 0; \
+        dcache.load(tlb_data[vpn % TLB_ENTRIES].host_offset + addr, sizeof(type##_t), (char*)&data); \
+        return data; \
+      } \
       if (unlikely(tlb_load_tag[vpn % TLB_ENTRIES] == (vpn | TLB_CHECK_TRIGGERS))) { \
-        type##_t data = *(type##_t*)(tlb_data[vpn % TLB_ENTRIES].host_offset + addr); \
+        type##_t data = 0; \
+        dcache.load(tlb_data[vpn % TLB_ENTRIES].host_offset + addr, sizeof(type##_t), (char*)&data); \
         if (!matched_trigger) { \
           matched_trigger = trigger_exception(OPERATION_LOAD, addr, data); \
           if (matched_trigger) \
@@ -119,14 +253,14 @@ public:
         return misaligned_store(addr, val, sizeof(type##_t)); \
       reg_t vpn = addr >> PGSHIFT; \
       if (likely(tlb_store_tag[vpn % TLB_ENTRIES] == vpn)) \
-        *(type##_t*)(tlb_data[vpn % TLB_ENTRIES].host_offset + addr) = val; \
+        dcache.store(tlb_data[vpn % TLB_ENTRIES].host_offset + addr, sizeof(type##_t), (const char*)&val); \
       else if (unlikely(tlb_store_tag[vpn % TLB_ENTRIES] == (vpn | TLB_CHECK_TRIGGERS))) { \
         if (!matched_trigger) { \
           matched_trigger = trigger_exception(OPERATION_STORE, addr, val); \
           if (matched_trigger) \
             throw *matched_trigger; \
         } \
-        *(type##_t*)(tlb_data[vpn % TLB_ENTRIES].host_offset + addr) = val; \
+        dcache.store(tlb_data[vpn % TLB_ENTRIES].host_offset + addr, sizeof(type##_t), (const char*)&val); \
       } \
       else \
         store_slow_path(addr, sizeof(type##_t), (const uint8_t*)&val); \
@@ -217,6 +351,10 @@ public:
   void flush_tlb();
   void flush_icache();
 
+  void flush_dcache() {
+    dcache.flush();
+  }
+
   void register_memtracer(memtracer_t*);
 
 private:
@@ -290,6 +428,9 @@ private:
   bool check_triggers_store;
   // The exception describing a matched trigger, or NULL.
   trigger_matched_t *matched_trigger;
+
+  // write-through data cache
+  siwt_cache_t dcache;
 
   friend class processor_t;
 };

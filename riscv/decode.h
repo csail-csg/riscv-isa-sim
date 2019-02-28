@@ -113,6 +113,9 @@ public:
   uint64_t rs3() { return x(27, 5); }
   uint64_t rm() { return x(12, 3); }
   uint64_t csr() { return x(20, 12); }
+  
+  bool aq() { return (b & (insn_bits_t(1) << 26)) != 0; }
+  bool rl() { return (b & (insn_bits_t(1) << 25)) != 0; }
 
   int64_t rvc_imm() { return x(2, 5) + (xs(12, 1) << 5); }
   int64_t rvc_zimm() { return x(2, 5) + (x(12, 1) << 5); }
@@ -162,8 +165,8 @@ private:
 #define READ_REG(reg) STATE.XPR[reg]
 #define READ_FREG(reg) STATE.FPR[reg]
 // [sizhuo] we trace integer rs1/rs2/rd here
-#define RS1 READ_REG((p->cur_trace.rs[1] = insn.rs1()))
-#define RS2 READ_REG((p->cur_trace.rs[2] = insn.rs2()))
+#define RS1 READ_REG((p->cur_trace.rs[0] = insn.rs1()))
+#define RS2 READ_REG((p->cur_trace.rs[1] = insn.rs2()))
 #define WRITE_RD(value) WRITE_REG((p->cur_trace.rd = insn.rd()), value)
 
 #ifndef RISCV_ENABLE_COMMITLOG
@@ -196,9 +199,9 @@ private:
 
 // FPU macros
 // [sizhuo] we trace FP rs1/rs2/rd here: reg = freg + 32
-#define FRS1 READ_FREG(((p->cur_trace.rs[1] = insn.rs1() + 32) - 32))
-#define FRS2 READ_FREG(((p->cur_trace.rs[2] = insn.rs2() + 32) - 32))
-#define FRS3 READ_FREG(((p->cur_trace.rs[3] = insn.rs3() + 32) - 32))
+#define FRS1 READ_FREG(((p->cur_trace.rs[0] = insn.rs1() + 32) - 32))
+#define FRS2 READ_FREG(((p->cur_trace.rs[1] = insn.rs2() + 32) - 32))
+#define FRS3 READ_FREG(((p->cur_trace.rs[2] = insn.rs3() + 32) - 32))
 #define dirty_fp_state (STATE.mstatus |= MSTATUS_FS | (xlen == 64 ? MSTATUS64_SD : MSTATUS32_SD))
 #define dirty_ext_state (STATE.mstatus |= MSTATUS_XS | (xlen == 64 ? MSTATUS64_SD : MSTATUS32_SD))
 #define DO_WRITE_FREG(reg, value) (STATE.FPR.write(reg, value), dirty_fp_state)
