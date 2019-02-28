@@ -30,7 +30,8 @@ sim_t::sim_t(const char* isa, size_t nprocs, bool halted, reg_t start_pc,
              sync_buffer_t<traced_inst_t>** trace)
   : htif_t(args), debug_module(this), mems(mems), procs(std::max(nprocs, size_t(1))),
     start_pc(start_pc),
-    current_step(0), current_proc(0), debug(false), remote_bitbang(NULL),
+    current_step(0), current_interleave(0), current_proc(0),
+    debug(false), remote_bitbang(NULL),
     dcache_enabled(max_hits_in_dcache > 0), dcache_max_hits(max_hits_in_dcache)
 {
   signal(SIGINT, &handle_signal);
@@ -88,23 +89,39 @@ int sim_t::run()
 
 void sim_t::step(size_t n)
 {
-  for (size_t i = 0, steps = 0; i < n; i += steps)
+  for (size_t i = 0; i < n; i++)
   {
-    steps = std::min(n - i, INTERLEAVE - current_step);
-    procs[current_proc]->step(steps);
+    procs[current_proc]->step(1);
+    current_proc++;
+    if (current_proc == procs.size()) {
+      current_proc = 0;
+    }
 
-    current_step += steps;
-    if (current_step == INTERLEAVE)
-    {
+    // check host when processors have totally executed INTERLEAVE instructions
+    bool check_host = false;
+    // increment time when every processor has executed INTERLEAVE
+    // instructions, i.e., totally executed INTERLEAVE * NPROCS instructions
+    bool inc_time = false;
+
+    current_step++;
+    if (current_step == INTERLEAVE) {
       current_step = 0;
-      procs[current_proc]->yield_load_reservation();
-      if (++current_proc == procs.size()) {
-        current_proc = 0;
-        clint->increment(INTERLEAVE / INSNS_PER_RTC_TICK);
+      check_host = true;
+      current_interleave++;
+      if (current_interleave == procs.size()) {
+        current_interleave = 0;
+        inc_time = true;
       }
+    }
 
+    if (inc_time) {
+      clint->increment(INTERLEAVE / INSNS_PER_RTC_TICK);
+    }
+    if (check_host) {
       host->switch_to();
     }
+
+    // We yield load reservation when a store is made through D$
   }
 }
 
@@ -331,6 +348,11 @@ char* sim_t::addr_to_mem(reg_t addr) {
 
 void sim_t::reset()
 {
+  // notify the MMU of each processor with tohost and fromhost addrs
+  for (int i = 0; i < procs.size(); i++) {
+    procs[i]->mmu->set_htif_addrs();
+  }
+
   make_dtb();
 }
 
@@ -352,6 +374,6 @@ void sim_t::write_chunk(addr_t taddr, size_t len, const void* src)
   uint64_t data;
   memcpy(&data, src, sizeof data);
   debug_mmu->store_uint64(taddr, data);
-  // no need to evict lines from all D$s, because DMA is essentially another
-  // core
+  // No need to evict lines from all D$s, because DMA is essentially another
+  // core. However, the D$ of debug_mmu will invalidate any load reservation
 }

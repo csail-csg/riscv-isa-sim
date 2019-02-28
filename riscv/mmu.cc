@@ -10,7 +10,7 @@ mmu_t::mmu_t(sim_t* sim, processor_t* proc)
   check_triggers_load(false),
   check_triggers_store(false),
   matched_trigger(NULL),
-  dcache(sim->dcache_enabled, sim->dcache_max_hits)
+  dcache(sim, proc)
 {
   flush_tlb();
 }
@@ -208,8 +208,8 @@ reg_t mmu_t::walk(reg_t addr, access_type type, reg_t mode)
 #ifdef RISCV_ENABLE_DIRTY
       // set accessed and possibly dirty bits.
       *(uint32_t*)ppte |= ad;
-      // since D$ may have stale copy, we should evict it; currently we don't
-      // use dirty bit in hardware implementation
+      // we should do this write through D$; currently we don't use dirty bit
+      // in hardware implementation
       static_assert(false);
 #else
       // take exception if access or possibly dirty bit is not set.

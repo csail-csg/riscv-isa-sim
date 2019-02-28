@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <vector>
+#include <stdio.h>
 
 // virtual memory configuration
 #define PGSHIFT 12
@@ -56,13 +57,18 @@ class trigger_matched_t
 // We use write-through to avoid issues related to coherece and page walk.
 class siwt_cache_t {
 public:
-  siwt_cache_t(bool enable, int hits) :
-    enabled(enable),
-    max_hits(hits),
+  siwt_cache_t(sim_t* s, processor_t* p) :
+    sim(s),
+    proc(p),
+    // disable D$ for debug MMU which is used for HTIF, etc.
+    enabled(sim->dcache_enabled && proc != NULL),
+    max_hits(sim->dcache_max_hits),
     data_ram(NULL),
     valid_ram(NULL),
     tag_ram(NULL),
-    hit_ram(NULL)
+    hit_ram(NULL),
+    tohost(NULL),
+    fromhost(NULL)
   {
     data_ram = (char*)calloc(1 << index_width, 1 << log_line_bytes);
     if (!data_ram) {
@@ -80,6 +86,9 @@ public:
     if (!hit_ram) {
       throw std::runtime_error("cannot allocate D$ hit count");
     }
+
+    fprintf(stderr, "info: dcache: enable %d, max hits %d\n",
+            int(enabled), max_hits);
   }
 
   ~siwt_cache_t() {
@@ -89,43 +98,54 @@ public:
     free(hit_ram);
   }
 
-  inline void load(char* addr, reg_t len, char* dst) {
-    if (!enabled) {
+  inline void load(char* addr, reg_t len, char* dst, bool exclusive = false) {
+    if (!enabled || is_htif_addr(addr)) {
       memcpy(dst, addr, len);
       return;
     }
-    // check no cross line boundary
-    assert(get_offset((addr_t)addr) + len <= (1 << log_line_bytes));
-    // cache look up
+
+    // cache look up (load for exclusivness, e.g., AMO-load or LR, should fetch
+    // from memory)
     addr_t index = get_index((addr_t)addr);
     addr_t tag = get_tag((addr_t)addr);
-    if (valid_ram[index] && tag == tag_ram[index]) {
-      hit_ram[index]++;
+    if (exclusive || !valid_ram[index] || tag != tag_ram[index]) {
+      refill_line(addr, index, tag);
     }
     else {
-      refill_line(addr, index, tag);
+      hit_ram[index]++;
     }
     memcpy(dst, get_data_ptr((addr_t)addr), len);
     // evict after certain number of hits
     if (hit_ram[index] >= max_hits) {
       valid_ram[index] = false;
     }
+    // check no cross line boundary
+    assert(get_offset((addr_t)addr) + len <= (1 << log_line_bytes));
   }
 
   inline void store(char* addr, reg_t len, const char* val) {
     // write through
     memcpy(addr, val, len);
+    // Invalidate other cores' load reservation on the same double word
+    for (processor_t *p : sim->procs) {
+      if (p != proc) {
+        if (((addr_t)addr >> 3) == (p->get_state()->load_reservation >> 3)) {
+          p->yield_load_reservation();
+        }
+      }
+    }
     if (!enabled) {
       return;
     }
-    // check no cross line boundary
-    assert(get_offset((addr_t)addr) + len <= (1 << log_line_bytes));
+
     // evict written line to avoid subword problems
     addr_t index = get_index((addr_t)addr);
     addr_t tag = get_tag((addr_t)addr);
     if (valid_ram[index] && tag == tag_ram[index]) {
       valid_ram[index] = false;
     }
+    // check no cross line boundary
+    assert(get_offset((addr_t)addr) + len <= (1 << log_line_bytes));
   }
 
   inline void flush() {
@@ -135,7 +155,19 @@ public:
     memset(valid_ram, 0, 1 << index_width);
   }
 
+  void set_htif_addrs() {
+    addr_t to = sim->get_tohost_addr();
+    addr_t from = sim->get_fromhost_addr();
+    tohost = sim->addr_to_mem(to);
+    fromhost = sim->addr_to_mem(from);
+    fprintf(stderr, "info: mmu: tohost %llx, fromhost %llx\n",
+            (long long unsigned)to, (long long unsigned)from);
+  }
+
 private:
+  sim_t *sim;
+  processor_t *proc;
+
   // 512KB cache, 64B line
   static const int log_line_bytes = 6;
   static const int index_width = 13;
@@ -152,6 +184,9 @@ private:
   bool *valid_ram;
   addr_t *tag_ram;
   int *hit_ram;
+
+  char* tohost;
+  char* fromhost;
 
   inline addr_t get_tag(addr_t addr) {
     return addr >> (index_width + log_line_bytes);
@@ -175,6 +210,10 @@ private:
     valid_ram[index] = true;
     tag_ram[index] = tag;
     hit_ram[index] = 0;
+  }
+
+  inline bool is_htif_addr(char* addr) {
+    return addr == tohost || addr == fromhost;
   }
 };
 
@@ -209,19 +248,20 @@ public:
   }
 
   // template for functions that load an aligned value from memory
+  // 2nd arg is used for loads for exclusivness, e.g., AMO-load or LR
   #define load_func(type) \
-    inline type##_t load_##type(reg_t addr) { \
+    inline type##_t load_##type(reg_t addr, bool exclusive = false) { \
       if (unlikely(addr & (sizeof(type##_t)-1))) \
         return misaligned_load(addr, sizeof(type##_t)); \
       reg_t vpn = addr >> PGSHIFT; \
       if (likely(tlb_load_tag[vpn % TLB_ENTRIES] == vpn)) { \
         type##_t data = 0; \
-        dcache.load(tlb_data[vpn % TLB_ENTRIES].host_offset + addr, sizeof(type##_t), (char*)&data); \
+        dcache.load(tlb_data[vpn % TLB_ENTRIES].host_offset + addr, sizeof(type##_t), (char*)&data, exclusive); \
         return data; \
       } \
       if (unlikely(tlb_load_tag[vpn % TLB_ENTRIES] == (vpn | TLB_CHECK_TRIGGERS))) { \
         type##_t data = 0; \
-        dcache.load(tlb_data[vpn % TLB_ENTRIES].host_offset + addr, sizeof(type##_t), (char*)&data); \
+        dcache.load(tlb_data[vpn % TLB_ENTRIES].host_offset + addr, sizeof(type##_t), (char*)&data, exclusive); \
         if (!matched_trigger) { \
           matched_trigger = trigger_exception(OPERATION_LOAD, addr, data); \
           if (matched_trigger) \
@@ -273,7 +313,7 @@ public:
       if (addr & (sizeof(type##_t)-1)) \
         throw trap_store_address_misaligned(addr); \
       try { \
-        auto lhs = load_##type(addr); \
+        auto lhs = load_##type(addr, true); \
         store_##type(addr, f(lhs)); \
         return lhs; \
       } catch (trap_load_page_fault& t) { \
@@ -353,6 +393,9 @@ public:
 
   void flush_dcache() {
     dcache.flush();
+  }
+  void set_htif_addrs() {
+    dcache.set_htif_addrs();
   }
 
   void register_memtracer(memtracer_t*);

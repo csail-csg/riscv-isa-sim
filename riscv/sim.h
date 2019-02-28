@@ -58,6 +58,7 @@ private:
   static const size_t INSNS_PER_RTC_TICK = 100; // 10 MHz clock for 1 BIPS core
   static const size_t CPU_HZ = 1000000000; // 1GHz CPU
   size_t current_step;
+  size_t current_interleave;
   size_t current_proc;
   bool debug;
   bool log;
@@ -98,6 +99,7 @@ private:
 
   friend class processor_t;
   friend class mmu_t;
+  friend class siwt_cache_t;
 
   // htif
   friend void sim_thread_main(void*);
