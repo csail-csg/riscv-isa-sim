@@ -88,18 +88,21 @@ reg_t reg_from_bytes(size_t len, const uint8_t* bytes)
   abort();
 }
 
-void mmu_t::load_slow_path(reg_t addr, reg_t len, uint8_t* bytes)
+void mmu_t::load_slow_path(reg_t addr, reg_t len, uint8_t* bytes, bool exclusive, bool reserve)
 {
   reg_t paddr = translate(addr, LOAD);
 
   if (auto host_addr = sim->addr_to_mem(paddr)) {
-    dcache.load(host_addr, len, (char*)bytes);
+    dcache.load(host_addr, len, (char*)bytes, exclusive, reserve);
     if (tracer.interested_in_range(paddr, paddr + PGSIZE, LOAD))
       tracer.trace(paddr, len, LOAD);
     else
       refill_tlb(addr, paddr, host_addr, LOAD);
-  } else if (!sim->mmio_load(paddr, len, bytes)) {
-    throw trap_load_access_fault(addr);
+  } else {
+    assert(!reserve); // cannot load-reserve on MMIO
+    if (!sim->mmio_load(paddr, len, bytes)) {
+      throw trap_load_access_fault(addr);
+    }
   }
 
   if (!matched_trigger) {
@@ -110,8 +113,10 @@ void mmu_t::load_slow_path(reg_t addr, reg_t len, uint8_t* bytes)
   }
 }
 
-void mmu_t::store_slow_path(reg_t addr, reg_t len, const uint8_t* bytes)
+reg_t mmu_t::store_slow_path(reg_t addr, reg_t len, const uint8_t* bytes, bool conditional)
 {
+  reg_t ret = 0; // by default, store is performed successfully
+
   reg_t paddr = translate(addr, STORE);
 
   if (!matched_trigger) {
@@ -122,14 +127,19 @@ void mmu_t::store_slow_path(reg_t addr, reg_t len, const uint8_t* bytes)
   }
 
   if (auto host_addr = sim->addr_to_mem(paddr)) {
-    dcache.store(host_addr, len, (const char*)bytes);
+    ret = dcache.store(host_addr, len, (const char*)bytes, conditional);
     if (tracer.interested_in_range(paddr, paddr + PGSIZE, STORE))
       tracer.trace(paddr, len, STORE);
     else
       refill_tlb(addr, paddr, host_addr, STORE);
-  } else if (!sim->mmio_store(paddr, len, bytes)) {
-    throw trap_store_access_fault(addr);
+  } else {
+    assert(!conditional); // cannot store-cond on MMIO
+    if (!sim->mmio_store(paddr, len, bytes)) {
+      throw trap_store_access_fault(addr);
+    }
   }
+
+  return ret;
 }
 
 tlb_entry_t mmu_t::refill_tlb(reg_t vaddr, reg_t paddr, char* host_addr, access_type type)

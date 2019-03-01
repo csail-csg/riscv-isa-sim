@@ -98,9 +98,22 @@ public:
     free(hit_ram);
   }
 
-  inline void load(char* addr, reg_t len, char* dst, bool exclusive = false) {
+  inline void load(char* addr, reg_t len, char* dst, bool exclusive, bool reserve) {
+    // check no cross line boundary
+    assert(get_offset((addr_t)addr) + len <= (1 << log_line_bytes));
+    // load reserve should be exclusive and from a real core (instead of DMA)
+    if (reserve) {
+      assert(exclusive);
+      assert(proc != NULL);
+    }
+
+    // perform load in case we don't use cache
     if (!enabled || is_htif_addr(addr)) {
       memcpy(dst, addr, len);
+      // make reservation
+      if (reserve) {
+        make_reservation(addr);
+      }
       return;
     }
 
@@ -120,23 +133,40 @@ public:
     if (max_hits >= 0 && hit_ram[index] >= max_hits) {
       valid_ram[index] = false;
     }
-    // check no cross line boundary
-    assert(get_offset((addr_t)addr) + len <= (1 << log_line_bytes));
+    // make reservation
+    if (reserve) {
+      make_reservation(addr);
+    }
   }
 
-  inline void store(char* addr, reg_t len, const char* val) {
+  inline reg_t store(char* addr, reg_t len, const char* val, bool conditional) {
+    // check no cross line boundary
+    assert(get_offset((addr_t)addr) + len <= (1 << log_line_bytes));
+
+    // determine store-cond success or fail
+    if (conditional) {
+      assert(proc);
+      if (((addr_t)addr >> 3) != ((addr_t)(proc->get_state()->load_reservation) >> 3)) {
+        // store-cond fails, skip the rest of actions, reset reservation
+        proc->yield_load_reservation();
+        return 1;
+      }
+      // store-cond succeeds, keep going, reset reservation
+      proc->yield_load_reservation();
+    }
+
     // write through
     memcpy(addr, val, len);
     // Invalidate other cores' load reservation on the same double word
     for (processor_t *p : sim->procs) {
       if (p != proc) {
-        if (((addr_t)addr >> 3) == (p->get_state()->load_reservation >> 3)) {
+        if (((addr_t)addr >> 3) == ((addr_t)(p->get_state()->load_reservation) >> 3)) {
           p->yield_load_reservation();
         }
       }
     }
     if (!enabled) {
-      return;
+      return 0; // store-cond is performed
     }
 
     // evict written line to avoid subword problems
@@ -145,8 +175,7 @@ public:
     if (valid_ram[index] && tag == tag_ram[index]) {
       valid_ram[index] = false;
     }
-    // check no cross line boundary
-    assert(get_offset((addr_t)addr) + len <= (1 << log_line_bytes));
+    return 0; // store-cond is performed
   }
 
   inline void flush() {
@@ -216,6 +245,10 @@ private:
   inline bool is_htif_addr(char* addr) {
     return addr == tohost || addr == fromhost;
   }
+
+  void inline make_reservation(char* addr) {
+    proc->get_state()->load_reservation = addr;
+  }
 };
 
 // this class implements a processor's port into the virtual memory system.
@@ -229,6 +262,8 @@ public:
   inline reg_t misaligned_load(reg_t addr, size_t size)
   {
 #ifdef RISCV_ENABLE_MISALIGNED
+    // our hardware doesn't support misaligned access
+    static_assert(false);
     reg_t res = 0;
     for (size_t i = 0; i < size; i++)
       res += (reg_t)load_uint8(addr + i) << (i * 8);
@@ -241,6 +276,8 @@ public:
   inline void misaligned_store(reg_t addr, reg_t data, size_t size)
   {
 #ifdef RISCV_ENABLE_MISALIGNED
+    // our hardware doesn't support misaligned access
+    static_assert(false);
     for (size_t i = 0; i < size; i++)
       store_uint8(addr + i, data >> (i * 8));
 #else
@@ -250,19 +287,23 @@ public:
 
   // template for functions that load an aligned value from memory
   // 2nd arg is used for loads for exclusivness, e.g., AMO-load or LR
+  // 3rd arg is whether we reserve the addr, just for LR
   #define load_func(type) \
-    inline type##_t load_##type(reg_t addr, bool exclusive = false) { \
-      if (unlikely(addr & (sizeof(type##_t)-1))) \
+    inline type##_t load_##type(reg_t addr, bool exclusive = false, bool reserve = false) { \
+      if (unlikely(addr & (sizeof(type##_t)-1))) { \
+        assert(!exclusive); \
+        assert(!reserve); \
         return misaligned_load(addr, sizeof(type##_t)); \
+      } \
       reg_t vpn = addr >> PGSHIFT; \
       if (likely(tlb_load_tag[vpn % TLB_ENTRIES] == vpn)) { \
         type##_t data = 0; \
-        dcache.load(tlb_data[vpn % TLB_ENTRIES].host_offset + addr, sizeof(type##_t), (char*)&data, exclusive); \
+        dcache.load(tlb_data[vpn % TLB_ENTRIES].host_offset + addr, sizeof(type##_t), (char*)&data, exclusive, reserve); \
         return data; \
       } \
       if (unlikely(tlb_load_tag[vpn % TLB_ENTRIES] == (vpn | TLB_CHECK_TRIGGERS))) { \
         type##_t data = 0; \
-        dcache.load(tlb_data[vpn % TLB_ENTRIES].host_offset + addr, sizeof(type##_t), (char*)&data, exclusive); \
+        dcache.load(tlb_data[vpn % TLB_ENTRIES].host_offset + addr, sizeof(type##_t), (char*)&data, exclusive, reserve); \
         if (!matched_trigger) { \
           matched_trigger = trigger_exception(OPERATION_LOAD, addr, data); \
           if (matched_trigger) \
@@ -271,7 +312,7 @@ public:
         return data; \
       } \
       type##_t res; \
-      load_slow_path(addr, sizeof(type##_t), (uint8_t*)&res); \
+      load_slow_path(addr, sizeof(type##_t), (uint8_t*)&res, exclusive, reserve); \
       return res; \
     }
 
@@ -288,23 +329,29 @@ public:
   load_func(int64)
 
   // template for functions that store an aligned value to memory
+  // 3rd arg is just for store-cond
+  // return value is just for store-cond. return 0 if store-cond succeeds,
+  // return 1 if store-cond fails
   #define store_func(type) \
-    void store_##type(reg_t addr, type##_t val) { \
-      if (unlikely(addr & (sizeof(type##_t)-1))) \
-        return misaligned_store(addr, val, sizeof(type##_t)); \
+    reg_t store_##type(reg_t addr, type##_t val, bool conditional = false) { \
+      if (unlikely(addr & (sizeof(type##_t)-1))) { \
+        assert(!conditional); \
+        misaligned_store(addr, val, sizeof(type##_t)); \
+        return 0; \
+      } \
       reg_t vpn = addr >> PGSHIFT; \
       if (likely(tlb_store_tag[vpn % TLB_ENTRIES] == vpn)) \
-        dcache.store(tlb_data[vpn % TLB_ENTRIES].host_offset + addr, sizeof(type##_t), (const char*)&val); \
+        return dcache.store(tlb_data[vpn % TLB_ENTRIES].host_offset + addr, sizeof(type##_t), (const char*)&val, conditional); \
       else if (unlikely(tlb_store_tag[vpn % TLB_ENTRIES] == (vpn | TLB_CHECK_TRIGGERS))) { \
         if (!matched_trigger) { \
           matched_trigger = trigger_exception(OPERATION_STORE, addr, val); \
           if (matched_trigger) \
             throw *matched_trigger; \
         } \
-        dcache.store(tlb_data[vpn % TLB_ENTRIES].host_offset + addr, sizeof(type##_t), (const char*)&val); \
+        return dcache.store(tlb_data[vpn % TLB_ENTRIES].host_offset + addr, sizeof(type##_t), (const char*)&val, conditional); \
       } \
       else \
-        store_slow_path(addr, sizeof(type##_t), (const uint8_t*)&val); \
+        return store_slow_path(addr, sizeof(type##_t), (const uint8_t*)&val, conditional); \
     }
 
   // template for functions that perform an atomic memory operation
@@ -314,8 +361,8 @@ public:
       if (addr & (sizeof(type##_t)-1)) \
         throw trap_store_address_misaligned(addr); \
       try { \
-        auto lhs = load_##type(addr, true); \
-        store_##type(addr, f(lhs)); \
+        auto lhs = load_##type(addr, true, false); \
+        store_##type(addr, f(lhs), false); \
         return lhs; \
       } catch (trap_load_page_fault& t) { \
         /* AMO faults should be reported as store faults */ \
@@ -429,8 +476,8 @@ private:
 
   // handle uncommon cases: TLB misses, page faults, MMIO
   tlb_entry_t fetch_slow_path(reg_t addr);
-  void load_slow_path(reg_t addr, reg_t len, uint8_t* bytes);
-  void store_slow_path(reg_t addr, reg_t len, const uint8_t* bytes);
+  void load_slow_path(reg_t addr, reg_t len, uint8_t* bytes, bool exclusive, bool reserve);
+  reg_t store_slow_path(reg_t addr, reg_t len, const uint8_t* bytes, bool conditional);
   reg_t translate(reg_t addr, access_type type);
 
   // ITLB lookup

@@ -122,7 +122,7 @@ void state_t::reset()
   memset(this, 0, sizeof(*this));
   prv = PRV_M;
   pc = DEFAULT_RSTVEC;
-  load_reservation = -1;
+  load_reservation = NULL;
   tselect = 0;
   for (unsigned int i = 0; i < num_triggers; i++)
     mcontrol[i].type = 2;

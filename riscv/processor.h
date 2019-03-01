@@ -135,7 +135,10 @@ struct state_t
       STEP_STEPPED
   } single_step;
 
-  reg_t load_reservation;
+  // reserved address is the pointer in host memory, instead of
+  // physical/virtual address; the host memory pointer has a one-to-one
+  // correspondence to physical DRAM of the simualted riscv processor.
+  char* load_reservation;
 
 #ifdef RISCV_ENABLE_COMMITLOG
   commit_log_reg_t log_reg_write;
@@ -180,7 +183,7 @@ public:
     return ext >= 'A' && ext <= 'Z' && ((isa >> (ext - 'A')) & 1);
   }
   void set_privilege(reg_t);
-  void yield_load_reservation() { state.load_reservation = (reg_t)-1; }
+  void yield_load_reservation() { state.load_reservation = NULL; }
   void update_histogram(reg_t pc);
   const disassembler_t* get_disassembler() { return disassembler; }
 

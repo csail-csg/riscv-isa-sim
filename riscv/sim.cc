@@ -349,8 +349,8 @@ char* sim_t::addr_to_mem(reg_t addr) {
 void sim_t::reset()
 {
   // notify the MMU of each processor with tohost and fromhost addrs
-  for (int i = 0; i < procs.size(); i++) {
-    procs[i]->mmu->set_htif_addrs();
+  for (processor_t *p : procs) {
+    p->mmu->set_htif_addrs();
   }
 
   make_dtb();
